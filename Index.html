@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delivery Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #0a0c12; color: #f1f3f9; font-family: monospace; min-height: 100vh; font-size: 13px; }
+textarea { background: #1a1e2e; border: 1px solid #252a3d; color: #f1f3f9; font-family: monospace; font-size: 12px; border-radius: 6px; padding: 10px; outline: none; width: 100%; resize: vertical; }
+textarea:focus { border-color: #3b82f6; }
+input[type=text] { background: #1a1e2e; border: 1px solid #252a3d; color: #f1f3f9; font-family: monospace; font-size: 12px; border-radius: 5px; padding: 7px 10px; outline: none; width: 100%; }
+input[type=text]:focus { border-color: #3b82f6; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const S = {
+  bg:"#0a0c12", panel:"#13161f", card:"#1a1e2e", border:"#252a3d",
+  blue:"#3b82f6", green:"#22c55e", red:"#ef4444", amber:"#f59e0b",
+  text:"#f1f3f9", muted:"#6b7280", cyan:"#06b6d4",
+};
+
+const RATES_477_900 = {
+  "Small Packet":0.61,"Packet":0.67,"Standard":0.89,
+  "Postable":0.53,"Heavy":1.00,"Heavy/Large":1.00,
+  "Hanging Garment":0.89,"Collection":0.00,
+};
+const RATES_950 = {
+  "Small Packet":0.69,"Packet":0.75,"Standard":1.00,
+  "Postable":0.60,"Heavy":1.00,"Heavy/Large":1.00,
+  "Hanging Garment":1.00,"Collection":0.00,
+};
+
+function calcRound(roundNum, parcels) {
+  const rates = roundNum === 871950 ? RATES_950 : RATES_477_900;
+  let total = 0;
+  const lines = [];
+  for (const [type, count] of Object.entries(parcels)) {
+    if (!count) continue;
+    const rate = rates[type] ?? 0;
+    const sub = Math.round(count * rate * 100) / 100;
+    lines.push({ type, count, rate, sub });
+    total += sub;
+  }
+  return { total: Math.round(total * 100) / 100, lines };
+}
+
+function loadData() {
+  try { const r = localStorage.getItem("delivery_tracker"); return r ? JSON.parse(r) : { periods: [] }; }
+  catch { return { periods: [] }; }
+}
+function saveData(d) {
+  try { localStorage.setItem("delivery_tracker", JSON.stringify(d)); } catch {}
+}
+
+function parseText(text) {
+  const PARCEL_TYPES = ["Small Packet","Heavy/Large","Hanging Garment","Standard","Postable","Packet","Heavy","Collection"];
+  const result = { date:null, distance_miles:null, duration_hours:null, duration_minutes:null, manifests:[], day_summary:null };
+  const dateM = text.match(/Manifest Date\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
+  if (dateM) result.date = dateM[1];
+  const distM = text.match(/estimated distance of ([\d.]+) mile/i);
+  if (distM) result.distance_miles = parseFloat(distM[1]);
+  const durM = text.match(/(\d+) hour\(s\) (\d+) minute/i);
+  if (durM) { result.duration_hours = parseInt(durM[1]); result.duration_minutes = parseInt(durM[2]); }
+  const blocks = text.split(/(?=Round Number)/i).filter(b => /Round Number/i.test(b));
+  blocks.forEach(block => {
+    const rnM = block.match(/Round Number\s*:?\s*(\d+)/i);
+    if (!rnM) return;
+    const roundNum = parseInt(rnM[1]);
+    const parcels = {};
+    PARCEL_TYPES.forEach(type => {
+      const esc = type.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp("(?:^|\\n)[ \\t]*" + esc + "[ \\t]*:?[ \\t]*(\\d+)", "im");
+      const m = block.match(re);
+      parcels[type] = m ? parseInt(m[1]) : 0;
+    });
+    result.manifests.push({ round_number: roundNum, parcels });
+  });
+  const succM = text.match(/Successful deliveries\s*:?\s*(\d+)/i);
+  const cfM = text.match(/Carry forward\s*:?\s*(\d+)/i);
+  const failM = text.match(/Cannot deliver\s*:?\s*(\d+)/i);
+  if (succM || cfM || failM) {
+    result.day_summary = {
+      successful: succM ? parseInt(succM[1]) : 0,
+      carry_forward: cfM ? parseInt(cfM[1]) : 0,
+      cannot_deliver: failM ? parseInt(failM[1]) : 0,
+    };
+  }
+  if (result.manifests.length === 0) throw new Error("No Round Numbers found.");
+  return result;
+}
+
+async function scanImages(files) {
+  const toBase64 = file => new Promise((res,rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(",")[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const images = await Promise.all(Array.from(files).map(async f => ({
+    type:"image", source:{type:"base64", media_type:f.type||"image/jpeg", data: await toBase64(f)}
+  })));
+  const prompt = `Extract delivery data from these courier app screenshots. Return ONLY valid JSON, no markdown.
+Schema:
+{"date":"DD/MM/YYYY","distance_miles":0,"duration_hours":0,"duration_minutes":0,"manifests":[{"round_number":871477,"parcels":{"Small Packet":0,"Packet":0,"Standard":0,"Postable":0,"Heavy":0,"Heavy/Large":0,"Hanging Garment":0,"Collection":0}}],"day_summary":{"successful":0,"carry_forward":0,"cannot_deliver":0}}
+Rules: extract all Round Numbers and parcel counts; distance/duration from "estimated distance" line; day_summary from "Successful deliveries" line; date from "Manifest Date" field; set missing fields to 0; day_summary is null if no Day Summary screen present.`;
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content:[...images,{type:"text",text:prompt}]}]})
+  });
+  if(!resp.ok) throw new Error("API "+resp.status+": "+(await resp.text()).slice(0,200));
+  const data = await resp.json();
+  const raw = data.content?.find(b=>b.type==="text")?.text||"";
+  return JSON.parse(raw.replace(/```json|```/g,"").trim());
+}
+
+const fmt = v => "£" + Number(v||0).toFixed(2);
+const pct = (a,b) => b > 0 ? ((a/b)*100).toFixed(1)+"%" : "—";
+
+function Btn({ children, onClick, color, style }) {
+  const bg = color==="red"?S.red:color==="green"?S.green:color==="cyan"?S.cyan:S.blue;
+  const tc = (color==="cyan"||color==="green")?"#000":"#fff";
+  return <div onClick={onClick} style={{ background:bg, color:tc, padding:"11px 0", borderRadius:6, textAlign:"center", cursor:"pointer", fontWeight:600, fontSize:13, userSelect:"none", ...style }}>{children}</div>;
+}
+
+function Stat({ label, value, color }) {
+  return (
+    <div style={{ background:S.card, border:"1px solid "+S.border, borderRadius:8, padding:"10px 12px", flex:1, minWidth:80 }}>
+      <div style={{ fontSize:9, color:S.muted, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:18, fontWeight:700, color:color||S.text }}>{value}</div>
+    </div>
+  );
+}
+
+function PeriodNameEditor({ name, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(name);
+  if (!editing) return (
+    <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
+      <span style={{ fontWeight:700, fontSize:16 }}>{name}</span>
+      <div onClick={() => { setVal(name); setEditing(true); }}
+        style={{ background:S.card, border:"1px solid "+S.border, color:S.muted, padding:"3px 10px", borderRadius:4, cursor:"pointer", fontSize:11 }}>✏ edit</div>
+    </div>
+  );
+  return (
+    <div style={{ display:"flex", gap:6, flex:1 }}>
+      <input type="text" value={val} onChange={e => setVal(e.target.value)}
+        style={{ flex:1, background:S.card, border:"1px solid "+S.blue, color:S.text, fontFamily:"monospace", fontSize:13, borderRadius:5, padding:"5px 10px", outline:"none" }}
+        onKeyDown={e => { if(e.key==="Enter"&&val.trim()){onSave(val.trim());setEditing(false);} if(e.key==="Escape")setEditing(false); }}
+        autoFocus />
+      <div onClick={() => { if(val.trim()){onSave(val.trim());setEditing(false);} }}
+        style={{ background:S.green, color:"#000", padding:"5px 12px", borderRadius:4, cursor:"pointer", fontSize:12, fontWeight:700 }}>✓</div>
+      <div onClick={() => setEditing(false)}
+        style={{ background:S.card, color:S.muted, padding:"5px 10px", borderRadius:4, cursor:"pointer", fontSize:12 }}>✕</div>
+    </div>
+  );
+}
+
+function App() {
+  const [data, setData] = useState(() => loadData());
+  const [view, setView] = useState("home");
+  const [activePi, setActivePi] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [pasteText, setPasteText] = useState("");
+  const [parseError, setParseError] = useState(null);
+  const [parsed, setParsed] = useState(null);
+  const [periodName, setPeriodName] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState(null);
+
+  const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast(null),2500); };
+
+  const persist = useCallback(nd => {
+    saveData(nd);
+    setData(nd);
+  }, []);
+
+  function exportData() {
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download="delivery-backup.json"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importData(e) {
+    const file = e.target.files[0]; if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const imported = JSON.parse(ev.target.result);
+        if(!imported.periods) throw new Error();
+        persist(imported);
+        showToast("Imported "+imported.periods.length+" periods");
+      } catch { showToast("Invalid file", false); }
+    };
+    reader.readAsText(file);
+  }
+
+  const activePeriod = data.periods[activePi];
+
+  function pStats(p) {
+    let total=0,success=0,failed=0,cf=0,amount=0,miles=0,mins=0;
+    (p.days||[]).forEach(d => {
+      total+=d.manifested||0; success+=d.successful||0; failed+=d.cannot_deliver||0;
+      cf+=d.carry_forward||0; amount+=d.amount||0; miles+=d.distance_miles||0;
+      mins+=(d.duration_hours||0)*60+(d.duration_minutes||0);
+    });
+    return {total,success,failed,cf,amount,miles:Math.round(miles*10)/10,mins};
+  }
+
+  function doParse() {
+    if(!pasteText.trim()) return;
+    setParseError(null); setParsed(null);
+    try { const r=parseText(pasteText); setParsed(r); setView("confirm"); }
+    catch(e) { setParseError("Parse failed: "+e.message); }
+  }
+
+  async function handleScan(files) {
+    if(!files||!files.length) return;
+    setScanning(true); setScanError(null); setParsed(null);
+    try {
+      const result = await scanImages(files);
+      setParsed(result);
+      setView("confirm");
+    } catch(e) { setScanError("Scan failed: "+e.message); }
+    setScanning(false);
+  }
+
+  function saveDay() {
+    if(!parsed?.date){showToast("No date found",false);return;}
+    let manifested=0, amount=0;
+    const rounds=[];
+    (parsed.manifests||[]).forEach(m => {
+      const {total,lines}=calcRound(m.round_number,m.parcels);
+      const cnt=Object.values(m.parcels).reduce((a,v)=>a+(v||0),0);
+      manifested+=cnt; amount+=total;
+      rounds.push({round:m.round_number,parcels:m.parcels,subtotal:total,lines});
+    });
+    const dayObj = {
+      date:parsed.date, manifested,
+      successful:parsed.day_summary?.successful||0,
+      carry_forward:parsed.day_summary?.carry_forward||0,
+      cannot_deliver:parsed.day_summary?.cannot_deliver||0,
+      distance_miles:parsed.distance_miles||0,
+      duration_hours:parsed.duration_hours||0,
+      duration_minutes:parsed.duration_minutes||0,
+      amount:Math.round(amount*100)/100, rounds, savedAt:Date.now(),
+    };
+    const periods = data.periods.map((p,pi) => {
+      if(pi!==activePi) return p;
+      const days=[...p.days.filter(d=>d.date!==dayObj.date),dayObj].sort((a,b)=>a.date.localeCompare(b.date));
+      return {...p,days};
+    });
+    persist({...data,periods});
+    showToast("Saved!");
+    setPasteText(""); setParsed(null);
+    setView("period");
+  }
+
+  function deleteDay(di) {
+    const periods=data.periods.map((p,pi)=>pi!==activePi?p:{...p,days:p.days.filter((_,i)=>i!==di)});
+    persist({...data,periods}); showToast("Deleted");
+  }
+
+  function deletePeriod() {
+    persist({...data,periods:data.periods.filter((_,i)=>i!==activePi)});
+    showToast("Deleted"); setView("home");
+  }
+
+  const wrap = children => (
+    <div style={{maxWidth:680,margin:"0 auto",padding:"22px 14px"}}>
+      {toast && <div style={{position:"fixed",top:14,right:14,background:toast.ok?S.green:S.red,color:"#fff",padding:"9px 18px",borderRadius:7,fontWeight:700,zIndex:9999,fontSize:12}}>{toast.msg}</div>}
+      {children}
+    </div>
+  );
+
+  const topBar = (title, back) => (
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+      {back && <div onClick={back} style={{background:S.card,border:"1px solid "+S.border,color:S.muted,padding:"6px 14px",borderRadius:5,cursor:"pointer"}}>← back</div>}
+      <span style={{fontWeight:700,fontSize:16}}>{title}</span>
+    </div>
+  );
+
+  // HOME
+  if (view==="home") return wrap(<>
+    {topBar("📦 Delivery Tracker")}
+    <div style={{display:"flex",gap:8,marginBottom:14}}>
+      <Btn onClick={()=>setView("add_period")} style={{flex:1}}>+ NEW PERIOD</Btn>
+      <div onClick={exportData} style={{background:S.green,color:"#000",padding:"11px 14px",borderRadius:6,cursor:"pointer",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>⬇ Backup</div>
+      <label style={{background:S.cyan,color:"#000",padding:"11px 14px",borderRadius:6,cursor:"pointer",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>
+        ⬆ Restore<input type="file" accept=".json" style={{display:"none"}} onChange={importData} />
+      </label>
+    </div>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+      {data.periods.length===0 && <div style={{color:S.muted,textAlign:"center",padding:32}}>no periods yet</div>}
+      {[...data.periods].reverse().map((p,ri) => {
+        const pi=data.periods.length-1-ri;
+        const s=pStats(p);
+        const durH=Math.floor(s.mins/60),durM=s.mins%60;
+        return (
+          <div key={pi} onClick={()=>{setActivePi(pi);setView("period");}}
+            style={{background:S.panel,border:"1px solid "+S.border,borderRadius:10,padding:"14px 16px",cursor:"pointer"}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:8}}>{p.name} <span style={{color:S.muted,fontSize:11}}>{p.days.length}d</span></div>
+            <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:12}}>
+              <span style={{color:S.muted}}>parcels <b style={{color:S.text}}>{s.total}</b></span>
+              <span style={{color:S.muted}}>delivered <b style={{color:S.green}}>{pct(s.success,s.total)}</b></span>
+              <span style={{color:S.amber,fontWeight:600}}>{fmt(s.amount)}</span>
+              <span style={{color:S.muted}}>{s.miles}mi / {durH}h{durM}m</span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </>);
+
+  // ADD PERIOD
+  if (view==="add_period") return wrap(<>
+    {topBar("NEW PERIOD", ()=>setView("home"))}
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <input type="text" value={periodName} onChange={e=>setPeriodName(e.target.value)} placeholder="e.g. Jun W1 / Period 12"
+        onKeyDown={e=>{if(e.key==="Enter"&&periodName.trim()){persist({...data,periods:[...data.periods,{name:periodName.trim(),days:[],createdAt:Date.now()}]});showToast("Created");setPeriodName("");setView("home");}}} />
+      <Btn onClick={()=>{if(!periodName.trim())return;persist({...data,periods:[...data.periods,{name:periodName.trim(),days:[],createdAt:Date.now()}]});showToast("Created");setPeriodName("");setView("home");}}>CREATE</Btn>
+    </div>
+  </>);
+
+  // PERIOD VIEW
+  if (view==="period" && activePeriod) {
+    const s=pStats(activePeriod);
+    const durH=Math.floor(s.mins/60),durM=s.mins%60;
+    return wrap(<>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
+        <div onClick={()=>setView("home")} style={{background:S.card,border:"1px solid "+S.border,color:S.muted,padding:"6px 14px",borderRadius:5,cursor:"pointer"}}>← back</div>
+        <PeriodNameEditor name={activePeriod.name} onSave={newName=>{
+          const periods=data.periods.map((p,pi)=>pi!==activePi?p:{...p,name:newName});
+          persist({...data,periods}); showToast("Renamed");
+        }} />
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+        <Stat label="Manifest" value={s.total} />
+        <Stat label="Delivered" value={s.success} color={S.green} />
+        <Stat label="CF" value={s.cf} color={S.amber} />
+        <Stat label="Failed" value={s.failed} color={S.red} />
+        <Stat label="Earned" value={fmt(s.amount)} color={S.amber} />
+        <Stat label="Miles" value={s.miles+"mi"} color={S.cyan} />
+        <Stat label="Drive" value={durH+"h"+durM+"m"} color={S.cyan} />
+      </div>
+      <Btn color="cyan" onClick={()=>setView("paste")} style={{marginBottom:8}}>📋 Paste Manifest Text</Btn>
+      <Btn color="red" onClick={()=>{if(confirm("Delete period?"))deletePeriod();}} style={{marginBottom:18}}>DELETE PERIOD</Btn>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {activePeriod.days.length===0 && <div style={{color:S.muted,fontSize:12,textAlign:"center",padding:24}}>no days yet</div>}
+        {[...activePeriod.days].reverse().map((d,ri)=>{
+          const di=activePeriod.days.length-1-ri;
+          return (
+            <div key={di} style={{background:S.panel,border:"1px solid "+S.border,borderRadius:10,padding:"12px 14px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                <span style={{fontWeight:700}}>{d.date}</span>
+                <div style={{display:"flex",gap:6}}>
+                  <div onClick={()=>setView("day_"+di)} style={{background:S.card,color:S.text,padding:"4px 10px",borderRadius:4,cursor:"pointer",fontSize:11}}>detail</div>
+                  <div onClick={()=>{if(confirm("Delete?"))deleteDay(di);}} style={{background:S.red+"20",color:S.red,padding:"4px 10px",borderRadius:4,cursor:"pointer",fontSize:11}}>×</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:12}}>
+                <span style={{color:S.muted}}>manifest <b style={{color:S.text}}>{d.manifested}</b></span>
+                <span style={{color:S.green}}>✓{d.successful} ({pct(d.successful,d.manifested)})</span>
+                <span style={{color:S.amber}}>cf{d.carry_forward}</span>
+                <span style={{color:S.amber,fontWeight:600}}>{fmt(d.amount)}</span>
+                {d.distance_miles>0 && <span style={{color:S.cyan}}>{d.distance_miles}mi {d.duration_hours}h{d.duration_minutes}m</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>);
+  }
+
+  // PASTE/SCAN VIEW
+  if (view==="paste") return wrap(<>
+    {topBar("ADD DAY", ()=>setView("period"))}
+
+    <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"14px",marginBottom:14}}>
+      <div style={{fontWeight:700,marginBottom:10,color:S.cyan}}>📷 Scan Screenshots</div>
+      <div style={{fontSize:11,color:S.muted,marginBottom:10}}>選晒當日所有截圖（Manifest + Day Summary）</div>
+      {scanning
+        ? <div style={{color:S.cyan,padding:"10px 0",textAlign:"center"}}>⏳ AI 掃描中…</div>
+        : <input type="file" accept="image/*" multiple onChange={e=>handleScan(e.target.files)}
+            style={{width:"100%",padding:"10px",background:S.bg,border:"1px solid "+S.border,borderRadius:5,color:S.text,fontSize:12}} />
+      }
+      {scanError && <div style={{color:S.red,fontSize:11,marginTop:8}}>{scanError}</div>}
+    </div>
+
+    <div style={{textAlign:"center",color:S.muted,fontSize:11,marginBottom:14}}>── 或者 ──</div>
+
+    <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"14px"}}>
+      <div style={{fontWeight:700,marginBottom:10,color:S.muted}}>📋 Paste Text</div>
+      <textarea rows={10} value={pasteText} onChange={e=>setPasteText(e.target.value)}
+        placeholder={"Round Number: 871477\nManifest Date: 30/05/2026\n...\nSuccessful deliveries: 199\n..."} />
+      {parseError && <div style={{color:S.red,fontSize:11,marginTop:8}}>{parseError}</div>}
+      <Btn color="cyan" onClick={doParse} style={{marginTop:10}}>PARSE →</Btn>
+    </div>
+  </>);
+
+  // CONFIRM VIEW
+  if (view==="confirm" && parsed) {
+    let totalAmount=0;
+    (parsed.manifests||[]).forEach(m=>{totalAmount+=calcRound(m.round_number,m.parcels).total;});
+    return wrap(<>
+      {topBar("CONFIRM DATA", ()=>setView("paste"))}
+      <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:12}}>
+        <div style={{display:"flex",gap:20,flexWrap:"wrap",fontSize:13}}>
+          <span>📅 <b>{parsed.date}</b></span>
+          {parsed.distance_miles && <span style={{color:S.cyan}}>🚐 {parsed.distance_miles}mi</span>}
+          {parsed.duration_hours!=null && <span style={{color:S.cyan}}>⏱ {parsed.duration_hours}h {parsed.duration_minutes}m</span>}
+        </div>
+      </div>
+      {(parsed.manifests||[]).map((m,i)=>{
+        const {total,lines}=calcRound(m.round_number,m.parcels);
+        return (
+          <div key={i} style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+              <b style={{fontSize:14}}>Round {m.round_number}</b>
+              <span style={{color:S.amber,fontWeight:700}}>{fmt(total)}</span>
+            </div>
+            {lines.filter(l=>l.count>0).map((l,j)=>(
+              <div key={j} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                <span style={{color:S.text}}>{l.type} <span style={{color:S.cyan}}>×{l.count}</span></span>
+                <span style={{color:S.muted}}>£{l.rate.toFixed(2)} = <b style={{color:S.amber}}>£{l.sub.toFixed(2)}</b></span>
+              </div>
+            ))}
+            {lines.filter(l=>l.count>0).length===0 && <div style={{color:S.red,fontSize:11}}>⚠ No parcel counts found</div>}
+          </div>
+        );
+      })}
+      {(() => {
+        const combined={};let grandCount=0;
+        (parsed.manifests||[]).forEach(m=>Object.entries(m.parcels).forEach(([type,count])=>{if(count>0){combined[type]=(combined[type]||0)+count;grandCount+=count;}}));
+        if(Object.keys(combined).length===0) return null;
+        return (
+          <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
+            <div style={{fontWeight:700,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
+              <span>All Rounds Combined</span>
+              <span style={{color:S.muted,fontSize:12}}>total {grandCount}</span>
+            </div>
+            {Object.entries(combined).map(([type,count],j)=>(
+              <div key={j} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
+                <span style={{color:S.text}}>{type}</span><span style={{color:S.cyan}}>×{count}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+      {parsed.day_summary && (
+        <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:12}}>
+          <div style={{fontWeight:700,marginBottom:6}}>Day Summary</div>
+          <div style={{display:"flex",gap:20}}>
+            <span style={{color:S.green}}>✓ {parsed.day_summary.successful}</span>
+            <span style={{color:S.amber}}>CF {parsed.day_summary.carry_forward}</span>
+            <span style={{color:S.red}}>✗ {parsed.day_summary.cannot_deliver}</span>
+          </div>
+        </div>
+      )}
+      <div style={{background:S.panel,borderRadius:8,padding:"12px 14px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{color:S.muted}}>Total Earnings</span>
+        <span style={{color:S.amber,fontWeight:700,fontSize:20}}>{fmt(totalAmount)}</span>
+      </div>
+      <Btn color="green" onClick={saveDay}>✓ SAVE</Btn>
+    </>);
+  }
+
+  // DAY DETAIL
+  if (view.startsWith("day_") && activePeriod) {
+    const di=parseInt(view.split("_")[1]);
+    const d=activePeriod.days[di];
+    if(!d){setView("period");return null;}
+    return wrap(<>
+      {topBar("📅 "+d.date, ()=>setView("period"))}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+        <Stat label="Manifest" value={d.manifested} />
+        <Stat label="Delivered" value={d.successful} color={S.green} />
+        <Stat label="CF" value={d.carry_forward} color={S.amber} />
+        <Stat label="Failed" value={d.cannot_deliver} color={S.red} />
+        <Stat label="Earned" value={fmt(d.amount)} color={S.amber} />
+        {d.distance_miles>0 && <Stat label="Miles" value={d.distance_miles+"mi"} color={S.cyan} />}
+        {d.duration_hours>0 && <Stat label="Drive" value={d.duration_hours+"h"+d.duration_minutes+"m"} color={S.cyan} />}
+      </div>
+      {(d.rounds||[]).map((r,i)=>(
+        <div key={i} style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+            <b>Round {r.round}</b><span style={{color:S.amber}}>{fmt(r.subtotal)}</span>
+          </div>
+          {r.lines.map((l,j)=>(
+            <div key={j} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:S.muted,marginBottom:3}}>
+              <span>{l.type}</span>
+              <span>{l.count} × £{l.rate.toFixed(2)} = <b style={{color:S.text}}>£{l.sub.toFixed(2)}</b></span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </>);
+  }
+
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
