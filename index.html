@@ -1,534 +1,565 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-HK">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Delivery Tracker</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<title>愛恨監獄 • Tamagotchi Sims</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { background: #0a0c12; color: #f1f3f9; font-family: monospace; min-height: 100vh; font-size: 13px; }
-textarea { background: #1a1e2e; border: 1px solid #252a3d; color: #f1f3f9; font-family: monospace; font-size: 12px; border-radius: 6px; padding: 10px; outline: none; width: 100%; resize: vertical; }
-textarea:focus { border-color: #3b82f6; }
-input[type=text] { background: #1a1e2e; border: 1px solid #252a3d; color: #f1f3f9; font-family: monospace; font-size: 12px; border-radius: 5px; padding: 7px 10px; outline: none; width: 100%; }
-input[type=text]:focus { border-color: #3b82f6; }
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+HK:wght@400;500;700&display=swap');
+
+:root {
+--primary: #c026ff;
+}
+
+body {
+font-family: 'Noto Sans HK', 'Noto Sans TC', system-ui, sans-serif;
+}
+
+.game-container {
+max-width: 420px;
+margin: 0 auto;
+background: #0f0a1f;
+min-height: 100dvh;
+box-shadow: 0 0 0 12px #1a1530;
+}
+
+.stat-bar {
+height: 10px;
+background: #2a2540;
+border-radius: 9999px;
+overflow: hidden;
+}
+
+.stat-fill {
+height: 100%;
+transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.character-card {
+transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.character-card:hover {
+transform: translateY(-4px);
+box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+}
+
+.love { border-color: #f472b6; }
+.hate { border-color: #f87171; }
+
+.modal {
+animation: modalPop 0.2s ease-out forwards;
+}
+
+@keyframes modalPop {
+from { transform: scale(0.9) translateY(20px); opacity: 0; }
+to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.action-btn {
+transition: all 0.1s ease;
+}
+
+.action-btn:active {
+transform: scale(0.95);
+}
+
+.prison-bg {
+background: linear-gradient(145deg, #1a1530, #0f0a1f);
+}
+
+.stat-label {
+font-size: 0.75rem;
+font-weight: 500;
+}
 </style>
 </head>
-<body>
-<div id="root"></div>
-<script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+<body class="bg-[#0a0818] text-white">
+<div class="game-container mx-auto border border-[#2a2540] min-h-screen flex flex-col">
 
-const S = {
-  bg:"#0a0c12", panel:"#13161f", card:"#1a1e2e", border:"#252a3d",
-  blue:"#3b82f6", green:"#22c55e", red:"#ef4444", amber:"#f59e0b",
-  text:"#f1f3f9", muted:"#6b7280", cyan:"#06b6d4",
-};
+<!-- Header -->
+<div class="bg-[#1a1530] px-4 py-3 flex items-center justify-between border-b border-[#2a2540]">
+<div>
+<h1 class="text-2xl font-bold tracking-tight">愛恨監獄</h1>
+<p class="text-xs text-pink-400">他媽哥池 × The Sims</p>
+</div>
+<div class="text-right">
+<div class="text-sm font-medium" id="time-display">第 <span id="day">1</span> 日　<span id="hour">08</span>:00</div>
+<div class="text-[10px] text-gray-400">管理分數 <span id="score" class="font-bold text-pink-400">128</span></div>
+</div>
+</div>
 
-const RATES_477_900 = {
-  "Small Packet":0.61,"Packet":0.67,"Standard":0.89,
-  "Postable":0.53,"Heavy":1.00,"Heavy/Large":1.00,
-  "Hanging Garment":0.89,"Collection":0.00,
-};
-const RATES_950 = {
-  "Small Packet":0.69,"Packet":0.75,"Standard":1.00,
-  "Postable":0.60,"Heavy":1.00,"Heavy/Large":1.00,
-  "Hanging Garment":1.00,"Collection":0.00,
-};
+<!-- Quick Action -->
+<div class="px-4 pt-3 pb-2 bg-[#1a1530]">
+<button onclick="advanceTime()"
+class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 active:scale-[0.985] transition-all text-white font-semibold py-3 rounded-2xl flex items-center justify-center gap-x-2 shadow-lg">
+<i class="fa-solid fa-clock mr-2"></i>
+<span class="font-bold">前進 4 小時</span>
+</button>
+</div>
 
-function calcRound(roundNum, parcels) {
-  const rates = roundNum === 871950 ? RATES_950 : RATES_477_900;
-  let total = 0;
-  const lines = [];
-  for (const [type, count] of Object.entries(parcels)) {
-    if (!count) continue;
-    const rate = rates[type] ?? 0;
-    const sub = Math.round(count * rate * 100) / 100;
-    lines.push({ type, count, rate, sub });
-    total += sub;
-  }
-  return { total: Math.round(total * 100) / 100, lines };
-}
+<!-- Tabs -->
+<div class="flex border-b border-[#2a2540] bg-[#1a1530]">
+<button onclick="switchTab(0)" id="tab-0"
+class="flex-1 py-3 text-sm font-medium border-b-2 border-pink-500 text-pink-400">居民列表</button>
+<button onclick="switchTab(1)" id="tab-1"
+class="flex-1 py-3 text-sm font-medium text-gray-400">創建角色</button>
+<button onclick="switchTab(2)" id="tab-2"
+class="flex-1 py-3 text-sm font-medium text-gray-400">日誌</button>
+</div>
+
+<!-- Content Area -->
+<div class="flex-1 overflow-auto p-4" id="main-content">
+
+<!-- Residents Tab -->
+<div id="tab-content-0">
+<div class="flex justify-between items-center mb-3 px-1">
+<div>
+<span class="font-semibold">目前居民</span>
+<span id="resident-count" class="ml-2 text-xs bg-[#2a2540] px-2 py-0.5 rounded-full">0</span>
+</div>
+<button onclick="switchTab(1)"
+class="text-xs flex items-center gap-x-1 text-pink-400 hover:text-pink-300">
+<i class="fa-solid fa-plus"></i>
+<span>新增</span>
+</button>
+</div>
+
+<div id="residents-grid" class="grid grid-cols-2 gap-3">
+<!-- Populated by JS -->
+</div>
+
+<div id="empty-state" class="hidden text-center py-10">
+<i class="fa-solid fa-user-slash text-5xl text-gray-600 mb-3"></i>
+<p class="text-gray-400">仲未有居民<br>快啲創建第一個角色啦！</p>
+</div>
+</div>
+
+<!-- Create Tab -->
+<div id="tab-content-1" class="hidden">
+<div class="bg-[#1a1530] rounded-3xl p-5 border border-[#2a2540]">
+<h3 class="font-bold mb-4 flex items-center gap-x-2">
+<i class="fa-solid fa-user-plus text-pink-400"></i>
+創建新角色
+</h3>
+
+<div class="space-y-4">
+<!-- Name -->
+<div>
+<label class="text-xs text-gray-400 block mb-1">角色名字</label>
+<input id="char-name" type="text" placeholder="例如：小美 / 阿強 / 老闆"
+class="w-full bg-[#2a2540] border border-[#3f3855] rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-pink-500">
+</div>
+
+<!-- Type -->
+<div>
+<label class="text-xs text-gray-400 block mb-1">呢個係...</label>
+<div class="grid grid-cols-2 gap-3">
+<button onclick="selectType('love')" id="type-love"
+class="flex items-center justify-center gap-x-2 py-3 rounded-2xl border-2 border-pink-500 bg-pink-950/30 text-pink-400">
+<i class="fa-solid fa-heart"></i>
+<span class="font-medium">❤️ 愛嘅人</span>
+</button>
+<button onclick="selectType('hate')" id="type-hate"
+class="flex items-center justify-center gap-x-2 py-3 rounded-2xl border-2 border-red-500 bg-red-950/30 text-red-400">
+<i class="fa-solid fa-skull"></i>
+<span class="font-medium">😠 憎嘅人</span>
+</button>
+</div>
+</div>
+
+<!-- Avatar -->
+<div>
+<label class="text-xs text-gray-400 block mb-1">頭像（選一個）</label>
+<div id="emoji-picker" class="grid grid-cols-6 gap-2 bg-[#2a2540] p-3 rounded-2xl">
+<!-- Populated by JS -->
+</div>
+</div>
+
+<button onclick="createCharacter()"
+class="mt-2 w-full bg-white text-black font-bold py-3.5 rounded-2xl active:scale-[0.985] transition">
+確認放入監獄 / Haven
+</button>
+</div>
+</div>
+</div>
+
+<!-- Log Tab -->
+<div id="tab-content-2" class="hidden">
+<div class="bg-[#1a1530] rounded-3xl p-4 border border-[#2a2540] min-h-[300px]">
+<div class="flex justify-between items-center mb-3">
+<span class="font-semibold">事件日誌</span>
+<button onclick="clearLogs()" class="text-xs text-red-400 hover:text-red-300">清除</button>
+</div>
+<div id="log-list" class="space-y-2 text-sm max-h-[420px] overflow-auto pr-1">
+<!-- Logs populated by JS -->
+</div>
+</div>
+</div>
+
+</div>
+
+<!-- Footer hint -->
+<div class="text-center py-2 text-[10px] text-gray-500 border-t border-[#2a2540]">
+數據自動儲存 • 長按角色卡可快速照顧
+</div>
+</div>
+
+<!-- Character Detail Modal -->
+<div id="modal" onclick="if (event.target.id === 'modal') closeModal()"
+class="hidden fixed inset-0 bg-black/70 flex items-end md:items-center justify-center z-50">
+<div onclick="event.stopImmediatePropagation()"
+class="modal bg-[#1a1530] w-full md:w-[400px] md:rounded-t-3xl md:rounded-b-3xl rounded-t-3xl p-5 border-t border-[#2a2540]">
+
+<div class="flex justify-between items-start mb-4">
+<div id="modal-header" class="flex items-center gap-x-3"></div>
+<button onclick="closeModal()" class="text-2xl leading-none text-gray-400 hover:text-white">×</button>
+</div>
+
+<!-- Stats -->
+<div id="modal-stats" class="space-y-3 mb-5"></div>
+
+<!-- Actions -->
+<div>
+<div class="text-xs text-gray-400 mb-2 px-1">可執行行動</div>
+<div id="modal-actions" class="grid grid-cols-2 gap-2"></div>
+</div>
+
+<div class="mt-4 text-center">
+<button onclick="closeModal()"
+class="text-sm text-gray-400 hover:text-white">關閉</button>
+</div>
+</div>
+</div>
+
+<script>
+// ==================== GAME DATA ====================
+let characters = [];
+let logs = [];
+let currentDay = 1;
+let currentHour = 8;
+let managementScore = 128;
+let selectedType = 'love';
+let selectedEmoji = '😊';
+
+const EMOJIS = ['😊','👩','🧔','👨','👩‍🦰','🧔‍♀️','😈','🥰','😡','🤠','👻','🐱','🐶','🦊','🐼'];
 
 function loadData() {
-  try { const r = localStorage.getItem("delivery_tracker"); return r ? JSON.parse(r) : { periods: [] }; }
-  catch { return { periods: [] }; }
+const saved = localStorage.getItem('lovehate_prison');
+if (saved) {
+const data = JSON.parse(saved);
+characters = data.characters || [];
+logs = data.logs || [];
+currentDay = data.currentDay || 1;
+currentHour = data.currentHour || 8;
+managementScore = data.managementScore || 128;
+} else {
+// First time - add 2 example characters
+characters = [
+{
+id: Date.now(),
+name: "小美",
+type: "love",
+emoji: "🥰",
+hunger: 85, happiness: 92, energy: 78, hygiene: 88, social: 95,
+lastUpdate: Date.now()
+},
+{
+id: Date.now() + 1,
+name: "阿強",
+type: "hate",
+emoji: "😡",
+hunger: 60, happiness: 35, energy: 55, hygiene: 40, social: 30,
+lastUpdate: Date.now()
 }
-function saveData(d) {
-  try { localStorage.setItem("delivery_tracker", JSON.stringify(d)); } catch {}
+ ];
+addLog("歡迎來到愛恨監獄！小美（愛的人）同阿強（憎的人）已經入住。");
+saveData();
 }
-
-function parseText(text) {
-  const PARCEL_TYPES = ["Small Packet","Heavy/Large","Hanging Garment","Standard","Postable","Packet","Heavy","Collection"];
-  const result = { date:null, distance_miles:null, duration_hours:null, duration_minutes:null, manifests:[], day_summary:null };
-  const dateM = text.match(/Manifest Date\s*:?\s*(\d{1,2}\/\d{1,2}\/\d{4})/i);
-  if (dateM) result.date = dateM[1];
-  const distM = text.match(/estimated distance of ([\d.]+) mile/i);
-  if (distM) result.distance_miles = parseFloat(distM[1]);
-  const durM = text.match(/(\d+) hour\(s\) (\d+) minute/i);
-  if (durM) { result.duration_hours = parseInt(durM[1]); result.duration_minutes = parseInt(durM[2]); }
-  const blocks = text.split(/(?=Round Number)/i).filter(b => /Round Number/i.test(b));
-  blocks.forEach(block => {
-    const rnM = block.match(/Round Number\s*:?\s*(\d+)/i);
-    if (!rnM) return;
-    const roundNum = parseInt(rnM[1]);
-    const parcels = {};
-    PARCEL_TYPES.forEach(type => {
-      const esc = type.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp("(?:^|\\n)[ \\t]*" + esc + "[ \\t]*:?[ \\t]*(\\d+)", "im");
-      const m = block.match(re);
-      parcels[type] = m ? parseInt(m[1]) : 0;
-    });
-    result.manifests.push({ round_number: roundNum, parcels });
-  });
-  const succM = text.match(/Successful deliveries\s*:?\s*(\d+)/i);
-  const cfM = text.match(/Carry forward\s*:?\s*(\d+)/i);
-  const failM = text.match(/Cannot deliver\s*:?\s*(\d+)/i);
-  if (succM || cfM || failM) {
-    result.day_summary = {
-      successful: succM ? parseInt(succM[1]) : 0,
-      carry_forward: cfM ? parseInt(cfM[1]) : 0,
-      cannot_deliver: failM ? parseInt(failM[1]) : 0,
-    };
-  }
-  if (result.manifests.length === 0) throw new Error("No Round Numbers found.");
-  return result;
+updateUI();
 }
 
-async function scanImages(files) {
-  const toBase64 = file => new Promise((res,rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result.split(",")[1]);
-    r.onerror = rej;
-    r.readAsDataURL(file);
-  });
-  const images = await Promise.all(Array.from(files).map(async f => ({
-    type:"image", source:{type:"base64", media_type:f.type||"image/jpeg", data: await toBase64(f)}
-  })));
-  const prompt = `Extract delivery data from these courier app screenshots. Return ONLY valid JSON, no markdown.
-Schema:
-{"date":"DD/MM/YYYY","distance_miles":0,"duration_hours":0,"duration_minutes":0,"manifests":[{"round_number":871477,"parcels":{"Small Packet":0,"Packet":0,"Standard":0,"Postable":0,"Heavy":0,"Heavy/Large":0,"Hanging Garment":0,"Collection":0}}],"day_summary":{"successful":0,"carry_forward":0,"cannot_deliver":0}}
-Rules: extract all Round Numbers and parcel counts; distance/duration from "estimated distance" line; day_summary from "Successful deliveries" line; date from "Manifest Date" field; set missing fields to 0; day_summary is null if no Day Summary screen present.`;
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST",
-    headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
-    body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content:[...images,{type:"text",text:prompt}]}]})
-  });
-  if(!resp.ok) throw new Error("API "+resp.status+": "+(await resp.text()).slice(0,200));
-  const data = await resp.json();
-  const raw = data.content?.find(b=>b.type==="text")?.text||"";
-  return JSON.parse(raw.replace(/```json|```/g,"").trim());
+function saveData() {
+localStorage.setItem('lovehate_prison', JSON.stringify({
+characters, logs, currentDay, currentHour, managementScore
+}));
 }
 
-const fmt = v => "£" + Number(v||0).toFixed(2);
-const pct = (a,b) => b > 0 ? ((a/b)*100).toFixed(1)+"%" : "—";
-
-function Btn({ children, onClick, color, style }) {
-  const bg = color==="red"?S.red:color==="green"?S.green:color==="cyan"?S.cyan:S.blue;
-  const tc = (color==="cyan"||color==="green")?"#000":"#fff";
-  return <div onClick={onClick} style={{ background:bg, color:tc, padding:"11px 0", borderRadius:6, textAlign:"center", cursor:"pointer", fontWeight:600, fontSize:13, userSelect:"none", ...style }}>{children}</div>;
+function addLog(text) {
+logs.unshift({
+time: ${currentDay}日 ${currentHour.toString().padStart(2,'0')}:00,
+text: text
+});
+if (logs.length > 30) logs.pop();
+saveData();
 }
 
-function Stat({ label, value, color }) {
-  return (
-    <div style={{ background:S.card, border:"1px solid "+S.border, borderRadius:8, padding:"10px 12px", flex:1, minWidth:80 }}>
-      <div style={{ fontSize:9, color:S.muted, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>{label}</div>
-      <div style={{ fontSize:18, fontWeight:700, color:color||S.text }}>{value}</div>
-    </div>
-  );
+// ==================== UI ====================
+function updateUI() {
+// Time
+document.getElementById('day').textContent = currentDay;
+document.getElementById('hour').textContent = currentHour.toString().padStart(2, '0');
+document.getElementById('score').textContent = managementScore;
+
+// Residents count
+document.getElementById('resident-count').textContent = characters.length;
+
+// Render residents grid
+renderResidents();
+
+// Render logs if on that tab
+if (!document.getElementById('tab-content-2').classList.contains('hidden')) {
+renderLogs();
+}
 }
 
-function PeriodNameEditor({ name, onSave }) {
-  const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(name);
-  if (!editing) return (
-    <div style={{ display:"flex", alignItems:"center", gap:8, flex:1 }}>
-      <span style={{ fontWeight:700, fontSize:16 }}>{name}</span>
-      <div onClick={() => { setVal(name); setEditing(true); }}
-        style={{ background:S.card, border:"1px solid "+S.border, color:S.muted, padding:"3px 10px", borderRadius:4, cursor:"pointer", fontSize:11 }}>✏ edit</div>
-    </div>
-  );
-  return (
-    <div style={{ display:"flex", gap:6, flex:1 }}>
-      <input type="text" value={val} onChange={e => setVal(e.target.value)}
-        style={{ flex:1, background:S.card, border:"1px solid "+S.blue, color:S.text, fontFamily:"monospace", fontSize:13, borderRadius:5, padding:"5px 10px", outline:"none" }}
-        onKeyDown={e => { if(e.key==="Enter"&&val.trim()){onSave(val.trim());setEditing(false);} if(e.key==="Escape")setEditing(false); }}
-        autoFocus />
-      <div onClick={() => { if(val.trim()){onSave(val.trim());setEditing(false);} }}
-        style={{ background:S.green, color:"#000", padding:"5px 12px", borderRadius:4, cursor:"pointer", fontSize:12, fontWeight:700 }}>✓</div>
-      <div onClick={() => setEditing(false)}
-        style={{ background:S.card, color:S.muted, padding:"5px 10px", borderRadius:4, cursor:"pointer", fontSize:12 }}>✕</div>
-    </div>
-  );
+function renderResidents() {
+const container = document.getElementById('residents-grid');
+const empty = document.getElementById('empty-state');
+
+container.innerHTML = '';
+
+if (characters.length === 0) {
+empty.classList.remove('hidden');
+return;
+}
+empty.classList.add('hidden');
+
+characters.forEach(char => {
+const mood = getMood(char);
+const avg = Math.round((char.hunger + char.happiness + char.energy + char.hygiene + char.social) / 5);
+
+const div = document.createElement('div');
+div.className = character-card bg-[#1a1530] border-2 rounded-3xl p-3 cursor-pointer ${char.type === 'love' ? 'love border-pink-500' : 'hate border-red-500'}; div.innerHTML =
+<div class="flex justify-between items-start">
+<div class="text-5xl">${char.emoji}&lt;/div&gt; &lt;div class="text-right"&gt; &lt;div class="text-xs px-2 py-0.5 rounded-full ${char.type === 'love' ? 'bg-pink-950 text-pink-400' : 'bg-red-950 text-red-400'}">
+`${char.type === 'love' ? '❤️ Haven' : '😠 Prison'}
+</div>
+</div>
+</div>
+
+<div class="mt-2">
+<div class="font-bold text-lg leading-none">latex
+{char.name}&lt;/div&gt; &lt;div class="flex items-center gap-x-1 mt-1"&gt; &lt;div class="text-xs \( {mood.color}"&gt; \){mood.emoji} 
+
+{mood.text}</div>
+<div class="text-[10px] text-gray-400">($`{avg}%)</div>
+</div>
+</div>
+
+<div class="mt-3 space-y-1.5">
+${createMiniStat('飢餓', char.hunger, '#f59e0b')} ${createMiniStat('快樂', char.happiness, '#ec4899')}
+</div>
+`;
+
+div.onclick = () => openModal(char.id);
+// Long press for quick care
+let pressTimer;
+div.onmousedown = () => {
+pressTimer = setTimeout(() => quickCare(char.id), 600);
+};
+div.onmouseup = () => clearTimeout(pressTimer);
+div.ontouchstart = () => {
+pressTimer = setTimeout(() => quickCare(char.id), 600);
+};
+div.ontouchend = () => clearTimeout(pressTimer);
+
+container.appendChild(div);
+});
 }
 
-function App() {
-  const [data, setData] = useState(() => loadData());
-  const [view, setView] = useState("home");
-  const [activePi, setActivePi] = useState(null);
-  const [toast, setToast] = useState(null);
-  const [pasteText, setPasteText] = useState("");
-  const [parseError, setParseError] = useState(null);
-  const [parsed, setParsed] = useState(null);
-  const [periodName, setPeriodName] = useState("");
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState(null);
-
-  const showToast = (msg, ok=true) => { setToast({msg,ok}); setTimeout(()=>setToast(null),2500); };
-
-  const persist = useCallback(nd => {
-    saveData(nd);
-    setData(nd);
-  }, []);
-
-  function exportData() {
-    const json = JSON.stringify(data, null, 2);
-    const blob = new Blob([json], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href=url; a.download="delivery-backup.json"; a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function importData(e) {
-    const file = e.target.files[0]; if(!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const imported = JSON.parse(ev.target.result);
-        if(!imported.periods) throw new Error();
-        persist(imported);
-        showToast("Imported "+imported.periods.length+" periods");
-      } catch { showToast("Invalid file", false); }
-    };
-    reader.readAsText(file);
-  }
-
-  const activePeriod = data.periods[activePi];
-
-  function pStats(p) {
-    let total=0,success=0,failed=0,cf=0,amount=0,miles=0,mins=0;
-    const types={};
-    (p.days||[]).forEach(d => {
-      total+=d.manifested||0; success+=d.successful||0; failed+=d.cannot_deliver||0;
-      cf+=d.carry_forward||0; amount+=d.amount||0; miles+=d.distance_miles||0;
-      mins+=(d.duration_hours||0)*60+(d.duration_minutes||0);
-      (d.rounds||[]).forEach(r => {
-        Object.entries(r.parcels||{}).forEach(([t,c]) => { if(c>0) types[t]=(types[t]||0)+c; });
-      });
-    });
-    return {total,success,failed,cf,amount,miles:Math.round(miles*10)/10,mins,types};
-  }
-
-  function doParse() {
-    if(!pasteText.trim()) return;
-    setParseError(null); setParsed(null);
-    try { const r=parseText(pasteText); setParsed(r); setView("confirm"); }
-    catch(e) { setParseError("Parse failed: "+e.message); }
-  }
-
-  async function handleScan(files) {
-    if(!files||!files.length) return;
-    setScanning(true); setScanError(null); setParsed(null);
-    try {
-      const result = await scanImages(files);
-      setParsed(result);
-      setView("confirm");
-    } catch(e) { setScanError("Scan failed: "+e.message); }
-    setScanning(false);
-  }
-
-  function saveDay() {
-    if(!parsed?.date){showToast("No date found",false);return;}
-    let manifested=0, amount=0;
-    const rounds=[];
-    (parsed.manifests||[]).forEach(m => {
-      const {total,lines}=calcRound(m.round_number,m.parcels);
-      const cnt=Object.values(m.parcels).reduce((a,v)=>a+(v||0),0);
-      manifested+=cnt; amount+=total;
-      rounds.push({round:m.round_number,parcels:m.parcels,subtotal:total,lines});
-    });
-    const dayObj = {
-      date:parsed.date, manifested,
-      successful:parsed.day_summary?.successful||0,
-      carry_forward:parsed.day_summary?.carry_forward||0,
-      cannot_deliver:parsed.day_summary?.cannot_deliver||0,
-      distance_miles:parsed.distance_miles||0,
-      duration_hours:parsed.duration_hours||0,
-      duration_minutes:parsed.duration_minutes||0,
-      amount:Math.round(amount*100)/100, rounds, savedAt:Date.now(),
-    };
-    const periods = data.periods.map((p,pi) => {
-      if(pi!==activePi) return p;
-      const days=[...p.days.filter(d=>d.date!==dayObj.date),dayObj].sort((a,b)=>a.date.localeCompare(b.date));
-      return {...p,days};
-    });
-    persist({...data,periods});
-    showToast("Saved!");
-    setPasteText(""); setParsed(null);
-    setView("period");
-  }
-
-  function deleteDay(di) {
-    const periods=data.periods.map((p,pi)=>pi!==activePi?p:{...p,days:p.days.filter((_,i)=>i!==di)});
-    persist({...data,periods}); showToast("Deleted");
-  }
-
-  function deletePeriod() {
-    persist({...data,periods:data.periods.filter((_,i)=>i!==activePi)});
-    showToast("Deleted"); setView("home");
-  }
-
-  const wrap = children => (
-    <div style={{maxWidth:680,margin:"0 auto",padding:"22px 14px"}}>
-      {toast && <div style={{position:"fixed",top:14,right:14,background:toast.ok?S.green:S.red,color:"#fff",padding:"9px 18px",borderRadius:7,fontWeight:700,zIndex:9999,fontSize:12}}>{toast.msg}</div>}
-      {children}
-    </div>
-  );
-
-  const topBar = (title, back) => (
-    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
-      {back && <div onClick={back} style={{background:S.card,border:"1px solid "+S.border,color:S.muted,padding:"6px 14px",borderRadius:5,cursor:"pointer"}}>← back</div>}
-      <span style={{fontWeight:700,fontSize:16}}>{title}</span>
-    </div>
-  );
-
-  // HOME
-  if (view==="home") return wrap(<>
-    {topBar("📦 Delivery Tracker")}
-    <div style={{display:"flex",gap:8,marginBottom:14}}>
-      <Btn onClick={()=>setView("add_period")} style={{flex:1}}>+ NEW PERIOD</Btn>
-      <div onClick={exportData} style={{background:S.green,color:"#000",padding:"11px 14px",borderRadius:6,cursor:"pointer",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>⬇ Backup</div>
-      <label style={{background:S.cyan,color:"#000",padding:"11px 14px",borderRadius:6,cursor:"pointer",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>
-        ⬆ Restore<input type="file" accept=".json" style={{display:"none"}} onChange={importData} />
-      </label>
-    </div>
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>
-      {data.periods.length===0 && <div style={{color:S.muted,textAlign:"center",padding:32}}>no periods yet</div>}
-      {[...data.periods].reverse().map((p,ri) => {
-        const pi=data.periods.length-1-ri;
-        const s=pStats(p);
-        const durH=Math.floor(s.mins/60),durM=s.mins%60;
-        return (
-          <div key={pi} onClick={()=>{setActivePi(pi);setView("period");}}
-            style={{background:S.panel,border:"1px solid "+S.border,borderRadius:10,padding:"14px 16px",cursor:"pointer"}}>
-            <div style={{fontWeight:700,fontSize:15,marginBottom:8}}>{p.name} <span style={{color:S.muted,fontSize:11}}>{p.days.length}d</span></div>
-            <div style={{display:"flex",gap:16,flexWrap:"wrap",fontSize:12}}>
-              <span style={{color:S.muted}}>parcels <b style={{color:S.text}}>{s.total}</b></span>
-              <span style={{color:S.muted}}>delivered <b style={{color:S.green}}>{pct(s.success,s.total)}</b></span>
-              <span style={{color:S.amber,fontWeight:600}}>{fmt(s.amount)}</span>
-              <span style={{color:S.muted}}>{s.miles}mi / {durH}h{durM}m</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  </>);
-
-  // ADD PERIOD
-  if (view==="add_period") return wrap(<>
-    {topBar("NEW PERIOD", ()=>setView("home"))}
-    <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <input type="text" value={periodName} onChange={e=>setPeriodName(e.target.value)} placeholder="e.g. Jun W1 / Period 12"
-        onKeyDown={e=>{if(e.key==="Enter"&&periodName.trim()){persist({...data,periods:[...data.periods,{name:periodName.trim(),days:[],createdAt:Date.now()}]});showToast("Created");setPeriodName("");setView("home");}}} />
-      <Btn onClick={()=>{if(!periodName.trim())return;persist({...data,periods:[...data.periods,{name:periodName.trim(),days:[],createdAt:Date.now()}]});showToast("Created");setPeriodName("");setView("home");}}>CREATE</Btn>
-    </div>
-  </>);
-
-  // PERIOD VIEW
-  if (view==="period" && activePeriod) {
-    const s=pStats(activePeriod);
-    const durH=Math.floor(s.mins/60),durM=s.mins%60;
-    return wrap(<>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:20}}>
-        <div onClick={()=>setView("home")} style={{background:S.card,border:"1px solid "+S.border,color:S.muted,padding:"6px 14px",borderRadius:5,cursor:"pointer"}}>← back</div>
-        <PeriodNameEditor name={activePeriod.name} onSave={newName=>{
-          const periods=data.periods.map((p,pi)=>pi!==activePi?p:{...p,name:newName});
-          persist({...data,periods}); showToast("Renamed");
-        }} />
-      </div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
-        <Stat label="Manifest" value={s.total} />
-        <Stat label="Delivered" value={s.success} color={S.green} />
-        <Stat label="CF" value={s.cf} color={S.amber} />
-        <Stat label="Failed" value={s.failed} color={S.red} />
-        <Stat label="Earned" value={fmt(s.amount)} color={S.amber} />
-        <Stat label="Miles" value={s.miles+"mi"} color={S.cyan} />
-        <Stat label="Drive" value={durH+"h"+durM+"m"} color={S.cyan} />
-      </div>
-      {Object.keys(s.types).length>0 && (
-        <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:14}}>
-          <div style={{fontSize:10,color:S.muted,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Parcel Types Total</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {Object.entries(s.types).sort((a,b)=>b[1]-a[1]).map(([t,c],i)=>(
-              <div key={i} style={{display:"flex",gap:6,alignItems:"center",background:S.bg,border:"1px solid "+S.border,borderRadius:5,padding:"5px 10px"}}>
-                <span style={{color:S.text,fontSize:12}}>{t}</span>
-                <span style={{color:S.cyan,fontWeight:700,fontSize:13}}>{c}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      <Btn color="cyan" onClick={()=>setView("paste")} style={{marginBottom:8}}>📋 Paste Manifest Text</Btn>
-      <Btn color="red" onClick={()=>{if(confirm("Delete period?"))deletePeriod();}} style={{marginBottom:18}}>DELETE PERIOD</Btn>
-      <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {activePeriod.days.length===0 && <div style={{color:S.muted,fontSize:12,textAlign:"center",padding:24}}>no days yet</div>}
-        {[...activePeriod.days].reverse().map((d,ri)=>{
-          const di=activePeriod.days.length-1-ri;
-          return (
-            <div key={di} style={{background:S.panel,border:"1px solid "+S.border,borderRadius:10,padding:"12px 14px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-                <span style={{fontWeight:700}}>{d.date}</span>
-                <div style={{display:"flex",gap:6}}>
-                  <div onClick={()=>setView("day_"+di)} style={{background:S.card,color:S.text,padding:"4px 10px",borderRadius:4,cursor:"pointer",fontSize:11}}>detail</div>
-                  <div onClick={()=>{if(confirm("Delete?"))deleteDay(di);}} style={{background:S.red+"20",color:S.red,padding:"4px 10px",borderRadius:4,cursor:"pointer",fontSize:11}}>×</div>
-                </div>
-              </div>
-              <div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:12}}>
-                <span style={{color:S.muted}}>manifest <b style={{color:S.text}}>{d.manifested}</b></span>
-                <span style={{color:S.green}}>✓{d.successful} ({pct(d.successful,d.manifested)})</span>
-                <span style={{color:S.amber}}>cf{d.carry_forward}</span>
-                <span style={{color:S.amber,fontWeight:600}}>{fmt(d.amount)}</span>
-                {d.distance_miles>0 && <span style={{color:S.cyan}}>{d.distance_miles}mi {d.duration_hours}h{d.duration_minutes}m</span>}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>);
-  }
-
-  // PASTE/SCAN VIEW
-  if (view==="paste") return wrap(<>
-    {topBar("ADD DAY", ()=>setView("period"))}
-
-    <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"14px",marginBottom:14}}>
-      <div style={{fontWeight:700,marginBottom:10,color:S.cyan}}>📷 Scan Screenshots</div>
-      <div style={{fontSize:11,color:S.muted,marginBottom:10}}>選晒當日所有截圖（Manifest + Day Summary）</div>
-      {scanning
-        ? <div style={{color:S.cyan,padding:"10px 0",textAlign:"center"}}>⏳ AI 掃描中…</div>
-        : <input type="file" accept="image/*" multiple onChange={e=>handleScan(e.target.files)}
-            style={{width:"100%",padding:"10px",background:S.bg,border:"1px solid "+S.border,borderRadius:5,color:S.text,fontSize:12}} />
-      }
-      {scanError && <div style={{color:S.red,fontSize:11,marginTop:8}}>{scanError}</div>}
-    </div>
-
-    <div style={{textAlign:"center",color:S.muted,fontSize:11,marginBottom:14}}>── 或者 ──</div>
-
-    <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"14px"}}>
-      <div style={{fontWeight:700,marginBottom:10,color:S.muted}}>📋 Paste Text</div>
-      <textarea rows={10} value={pasteText} onChange={e=>setPasteText(e.target.value)}
-        placeholder={"Round Number: 871477\nManifest Date: 30/05/2026\n...\nSuccessful deliveries: 199\n..."} />
-      {parseError && <div style={{color:S.red,fontSize:11,marginTop:8}}>{parseError}</div>}
-      <Btn color="cyan" onClick={doParse} style={{marginTop:10}}>PARSE →</Btn>
-    </div>
-  </>);
-
-  // CONFIRM VIEW
-  if (view==="confirm" && parsed) {
-    let totalAmount=0;
-    (parsed.manifests||[]).forEach(m=>{totalAmount+=calcRound(m.round_number,m.parcels).total;});
-    return wrap(<>
-      {topBar("CONFIRM DATA", ()=>setView("paste"))}
-      <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:12}}>
-        <div style={{display:"flex",gap:20,flexWrap:"wrap",fontSize:13}}>
-          <span>📅 <b>{parsed.date}</b></span>
-          {parsed.distance_miles && <span style={{color:S.cyan}}>🚐 {parsed.distance_miles}mi</span>}
-          {parsed.duration_hours!=null && <span style={{color:S.cyan}}>⏱ {parsed.duration_hours}h {parsed.duration_minutes}m</span>}
-        </div>
-      </div>
-      {(parsed.manifests||[]).map((m,i)=>{
-        const {total,lines}=calcRound(m.round_number,m.parcels);
-        return (
-          <div key={i} style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-              <b style={{fontSize:14}}>Round {m.round_number}</b>
-              <span style={{color:S.amber,fontWeight:700}}>{fmt(total)}</span>
-            </div>
-            {lines.filter(l=>l.count>0).map((l,j)=>(
-              <div key={j} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
-                <span style={{color:S.text}}>{l.type} <span style={{color:S.cyan}}>×{l.count}</span></span>
-                <span style={{color:S.muted}}>£{l.rate.toFixed(2)} = <b style={{color:S.amber}}>£{l.sub.toFixed(2)}</b></span>
-              </div>
-            ))}
-            {lines.filter(l=>l.count>0).length===0 && <div style={{color:S.red,fontSize:11}}>⚠ No parcel counts found</div>}
-          </div>
-        );
-      })}
-      {(() => {
-        const combined={};let grandCount=0;
-        (parsed.manifests||[]).forEach(m=>Object.entries(m.parcels).forEach(([type,count])=>{if(count>0){combined[type]=(combined[type]||0)+count;grandCount+=count;}}));
-        if(Object.keys(combined).length===0) return null;
-        return (
-          <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
-            <div style={{fontWeight:700,marginBottom:8,display:"flex",justifyContent:"space-between"}}>
-              <span>All Rounds Combined</span>
-              <span style={{color:S.muted,fontSize:12}}>total {grandCount}</span>
-            </div>
-            {Object.entries(combined).map(([type,count],j)=>(
-              <div key={j} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:3}}>
-                <span style={{color:S.text}}>{type}</span><span style={{color:S.cyan}}>×{count}</span>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
-      {parsed.day_summary && (
-        <div style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:12}}>
-          <div style={{fontWeight:700,marginBottom:6}}>Day Summary</div>
-          <div style={{display:"flex",gap:20}}>
-            <span style={{color:S.green}}>✓ {parsed.day_summary.successful}</span>
-            <span style={{color:S.amber}}>CF {parsed.day_summary.carry_forward}</span>
-            <span style={{color:S.red}}>✗ {parsed.day_summary.cannot_deliver}</span>
-          </div>
-        </div>
-      )}
-      <div style={{background:S.panel,borderRadius:8,padding:"12px 14px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{color:S.muted}}>Total Earnings</span>
-        <span style={{color:S.amber,fontWeight:700,fontSize:20}}>{fmt(totalAmount)}</span>
-      </div>
-      <Btn color="green" onClick={saveDay}>✓ SAVE</Btn>
-    </>);
-  }
-
-  // DAY DETAIL
-  if (view.startsWith("day_") && activePeriod) {
-    const di=parseInt(view.split("_")[1]);
-    const d=activePeriod.days[di];
-    if(!d){setView("period");return null;}
-    return wrap(<>
-      {topBar("📅 "+d.date, ()=>setView("period"))}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
-        <Stat label="Manifest" value={d.manifested} />
-        <Stat label="Delivered" value={d.successful} color={S.green} />
-        <Stat label="CF" value={d.carry_forward} color={S.amber} />
-        <Stat label="Failed" value={d.cannot_deliver} color={S.red} />
-        <Stat label="Earned" value={fmt(d.amount)} color={S.amber} />
-        {d.distance_miles>0 && <Stat label="Miles" value={d.distance_miles+"mi"} color={S.cyan} />}
-        {d.duration_hours>0 && <Stat label="Drive" value={d.duration_hours+"h"+d.duration_minutes+"m"} color={S.cyan} />}
-      </div>
-      {(d.rounds||[]).map((r,i)=>(
-        <div key={i} style={{background:S.card,border:"1px solid "+S.border,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-            <b>Round {r.round}</b><span style={{color:S.amber}}>{fmt(r.subtotal)}</span>
-          </div>
-          {r.lines.map((l,j)=>(
-            <div key={j} style={{display:"flex",justifyContent:"space-between",fontSize:12,color:S.muted,marginBottom:3}}>
-              <span>{l.type}</span>
-              <span>{l.count} × £{l.rate.toFixed(2)} = <b style={{color:S.text}}>£{l.sub.toFixed(2)}</b></span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </>);
-  }
-
-  return null;
+function createMiniStat(label, value, color) {
+return &lt;div class="flex items-center gap-x-2 text-xs"&gt; &lt;span class="w-8 text-gray-400"&gt;${label}</span>
+<div class="flex-1 stat-bar">
+<div class="stat-fill" style="width: {color}"></div>
+</div>
+<span class="w-7 text-right font-mono">${value}&lt;/span&gt; &lt;/div&gt;;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-</script>
-</body>
-</html>
+function getMood(char) {
+const avg = (char.hunger + char.happiness + char.energy + char.hygiene + char.social) / 5;
+if (avg >= 85) return { emoji: '😍', text: '非常滿足', color: 'text-pink-400' };
+if (avg >= 65) return { emoji: '🙂', text: '狀態不錯', color: 'text-emerald-400' };
+if (avg >= 40) return { emoji: '😐', text: '一般', color: 'text-yellow-400' };
+return { emoji: '😫', text: '需要照顧', color: 'text-red-400' };
+}
+
+// ==================== TABS ====================
+function switchTab(tab) {
+// Hide all
+document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
+document.querySelectorAll('[id^="tab-"]').forEach(el => {
+el.classList.remove('border-b-2', 'border-pink-500', 'text-pink-400');
+el.classList.add('text-gray-400');
+});
+
+// Show selected
+document.getElementById(tab-content-${tab}).classList.remove('hidden'); const tabBtn = document.getElementById(tab-${tab});
+tabBtn.classList.add('border-b-2', 'border-pink-500', 'text-pink-400');
+tabBtn.classList.remove('text-gray-400');
+
+if (tab === 2) renderLogs();
+}
+
+function renderLogs() {
+const container = document.getElementById('log-list');
+container.innerHTML = '';
+
+if (logs.length === 0) {
+container.innerHTML = <p class="text-center text-gray-500 py-8 text-sm"&gt;仲未有事件...&lt;/p>;
+return;
+}
+
+logs.forEach(log => {
+const div = document.createElement('div');
+div.className = 'bg-[#2a2540] px-3 py-2 rounded-2xl text-sm';
+div.innerHTML = &lt;span class="font-mono text-[10px] text-gray-500"&gt;${log.time}</span><br>
+<span>${log.text}&lt;/span&gt;;
+container.appendChild(div);
+});
+}
+
+function clearLogs() {
+if (confirm('確定清除所有日誌？')) {
+logs = [];
+saveData();
+renderLogs();
+}
+}
+
+// ==================== CREATE CHARACTER ====================
+function initEmojiPicker() {
+const picker = document.getElementById('emoji-picker');
+picker.innerHTML = '';
+
+EMOJIS.forEach(emoji => {
+const btn = document.createElement('button');
+btn.className = text-3xl p-1.5 rounded-xl hover:bg-[#3f3855] transition${emoji === selectedEmoji ? 'bg-pink-600' : ''}`;
+btn.textContent = emoji;
+btn.onclick = () => {
+selectedEmoji = emoji;
+// refresh picker
+initEmojiPicker();
+};
+picker.appendChild(btn);
+});
+}
+
+function selectType(type) {
+selectedType = type;
+
+const loveBtn = document.getElementById('type-love');
+const hateBtn = document.getElementById('type-hate');
+
+if (type === 'love') {
+loveBtn.classList.add('border-pink-500', 'bg-pink-950/30');
+hateBtn.classList.remove('border-red-500', 'bg-red-950/30');
+} else {
+hateBtn.classList.add('border-red-500', 'bg-red-950/30');
+loveBtn.classList.remove('border-pink-500', 'bg-pink-950/30');
+}
+}
+
+function createCharacter() {
+const nameInput = document.getElementById('char-name').value.trim();
+if (!nameInput) {
+alert('請輸入角色名字！');
+return;
+}
+
+const newChar = {
+id: Date.now(),
+name: nameInput,
+type: selectedType,
+emoji: selectedEmoji,
+hunger: selectedType === 'love' ? 85 : 55,
+happiness: selectedType === 'love' ? 90 : 40,
+energy: 75,
+hygiene: selectedType === 'love' ? 80 : 50,
+social: selectedType === 'love' ? 85 : 35,
+lastUpdate: Date.now()
+};
+
+characters.push(newChar);
+
+const wing = selectedType === 'love' ? 'Haven Wing（愛之翼）' : 'Prison Wing（憎之翼）';
+addLog(新角色「\( {nameInput}」已加入 \){wing}。);
+
+// Reset form
+document.getElementById('char-name').value = '';
+selectedEmoji = '😊';
+selectedType = 'love';
+initEmojiPicker();
+selectType('love');
+
+saveData();
+updateUI();
+switchTab(0); // back to list
+}
+
+// ==================== MODAL & ACTIONS ====================
+let currentCharId = null;
+
+function openModal(id) {
+currentCharId = id;
+const char = characters.find(c => c.id === id);
+if (!char) return;
+
+const modal = document.getElementById('modal');
+const header = document.getElementById('modal-header');
+const statsContainer = document.getElementById('modal-stats');
+const actionsContainer = document.getElementById('modal-actions');
+
+// Header
+header.innerHTML = &lt;div class="text-6xl"&gt;${char.emoji}</div>
+<div>
+<div class="font-bold text-2xl">${char.name}&lt;/div&gt; &lt;div class="text-sm ${char.type === 'love' ? 'text-pink-400' : 'text-red-400'}">
+${char.type === 'love' ? '❤️ Haven Wing' : '😠 Prison Wing'} &lt;/div&gt; &lt;/div&gt;;
+
+// Stats
+statsContainer.innerHTML = ${createStatRow('飢餓', char.hunger, '#f59e0b', 'fa-utensils')}
+${createStatRow('快樂', char.happiness, '#ec4899', 'fa-heart')} ${createStatRow('精力', char.energy, '#3b82f6', 'fa-bolt')}
+${createStatRow('衛生', char.hygiene, '#14b8a6', 'fa-shower')} ${createStatRow('社交', char.social, '#8b5cf6', 'fa-users')}
+`;
+
+// Actions (different for love/hate)
+actionsContainer.innerHTML = '';
+
+const actions = char.type === 'love' ? [
+{ label: '餵食', icon: 'fa-utensils', change: {hunger: 18, energy: -4} },
+{ label: '聊天', icon: 'fa-comments', change: {happiness: 15, social: 12} },
+{ label: '送禮物', icon: 'fa-gift', change: {happiness: 22, energy: -8} },
+{ label: '按摩', icon: 'fa-hand-holding-heart', change: {happiness: 18, energy: 10} },
+ ] : [
+{ label: '餵食', icon: 'fa-utensils', change: {hunger: 15} },
+{ label: '訓話', icon: 'fa-comment-dots', change: {happiness: -8, social: 5} },
+{ label: '罰做工', icon: 'fa-hammer', change: {energy: -15, hunger: -5, hygiene: -8} },
+{ label: '給予反思時間', icon: 'fa-user-clock', change: {happiness: 12, energy: 8} },
+ ];
+
+actions.forEach(action => {
+const btn = document.createElement('button');
+btn.className = action-btn flex items-center justify-center gap-x-2 bg-[#2a2540] hover:bg-[#3f3855] active:bg-[#4a425f] px-3 py-3 rounded-2xl text-sm font-medium;
+btn.innerHTML = &lt;i class="fa-solid${action.icon} w-4"></i>
+<span>${action.label}&lt;/span&gt;;
+btn.onclick = () => performAction(id, action.change, action.label);
+actionsContainer.appendChild(btn);
+});
+
+modal.classList.remove('hidden');
+modal.classList.add('flex');
+}
+
+function createStatRow(label, value, color, icon) {
+return &lt;div class="flex items-center gap-x-3"&gt; &lt;i class="fa-solid${icon} w-5 text-center" style="color: {label}</span>
+<span class="font-mono">{value}%; background: ${color}"></div>
+</div>
+</div>
+</div>
+`;
+}
+
+function performAction(charId, changes, actionName) {
+const charIndex = c
