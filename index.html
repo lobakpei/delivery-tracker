@@ -1,565 +1,1304 @@
+<!-- build: v0.1.1 2026-07-06 -->
 <!DOCTYPE html>
-<html lang="zh-HK">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>愛恨監獄 • Tamagotchi Sims</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="PaddleReady — is your SUP launch spot a go or a no-go today? Live wind, river levels, storm-overflow advisories and parking for UK paddleboarders.">
+<meta name="theme-color" content="#14646E">
+<title>PaddleReady — Go / No-Go for UK SUP</title>
+
+<!-- PWA: manifest is generated at runtime as a Blob URL (single-file constraint). -->
+<link id="manifest-link" rel="manifest" href="">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="PaddleReady">
+<link id="apple-icon" rel="apple-touch-icon" href="">
+
+<!-- Fonts (CDN) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&display=swap" rel="stylesheet">
+
+<!-- Leaflet (CDN) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Sans+HK:wght@400;500;700&display=swap');
-
-:root {
---primary: #c026ff;
+/* =========================================================================
+   DESIGN TOKENS
+   Cold-river palette + safety-signage accents. One display face
+   (Bricolage Grotesque) for identity; system stack for body & numbers.
+   ========================================================================= */
+:root{
+  --ink:#0E2A32;          /* deep river-slate — primary text            */
+  --ink-soft:#4B6570;     /* secondary text                             */
+  --paper:#F2F6F5;        /* cool mist background                       */
+  --card:#FFFFFF;
+  --line:#D8E2E1;
+  --water:#14646E;        /* teal-slate primary                         */
+  --water-deep:#0C4A52;
+  --go:#1F8A4C;
+  --caution:#D9820F;
+  --nogo:#C6362C;
+  --unknown:#7A8C93;
+  --sewage:#8A5A2B;       /* brown overlay + advisory                   */
+  --radius:14px;
+  --shadow:0 2px 10px rgba(14,42,50,.10);
+  --display:'Bricolage Grotesque', system-ui, sans-serif;
+  --body:system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
-body {
-font-family: 'Noto Sans HK', 'Noto Sans TC', system-ui, sans-serif;
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:var(--body);
+  background:var(--paper);
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+button{font:inherit;cursor:pointer}
+a{color:var(--water-deep)}
+:focus-visible{outline:3px solid var(--water);outline-offset:2px;border-radius:6px}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
 }
 
-.game-container {
-max-width: 420px;
-margin: 0 auto;
-background: #0f0a1f;
-min-height: 100dvh;
-box-shadow: 0 0 0 12px #1a1530;
+/* ---------- Header ---------- */
+header.app{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px calc(6px);
+  padding-top:calc(10px + env(safe-area-inset-top));
+}
+.brand{font-family:var(--display);font-weight:800;font-size:1.35rem;letter-spacing:-.02em;color:var(--water-deep)}
+.brand .tag{display:block;font-family:var(--body);font-weight:400;font-size:.72rem;color:var(--ink-soft);letter-spacing:.01em}
+.icon-btn{
+  min-width:44px;min-height:44px;border:1px solid var(--line);border-radius:50%;
+  background:var(--card);color:var(--water-deep);font-size:1.05rem;font-weight:700;
+  display:inline-flex;align-items:center;justify-content:center;box-shadow:var(--shadow);
 }
 
-.stat-bar {
-height: 10px;
-background: #2a2540;
-border-radius: 9999px;
-overflow: hidden;
+/* ---------- Verdict banner (signature element: slipway gauge-board) ---------- */
+.verdict{
+  margin:2px 12px 10px;border-radius:var(--radius);background:var(--card);
+  box-shadow:var(--shadow);overflow:hidden;display:flex;min-height:74px;
 }
-
-.stat-fill {
-height: 100%;
-transition: width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+.verdict .gauge{
+  width:16px;flex:0 0 16px;
+  /* painted depth-gauge stripes, tinted by verdict colour */
+  background:
+    repeating-linear-gradient(to bottom,
+      var(--v,#7A8C93) 0 14px,
+      color-mix(in srgb, var(--v,#7A8C93) 55%, white) 14px 28px);
+  transition:background .35s ease;
 }
-
-.character-card {
-transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+.verdict .body{padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:2px;flex:1}
+.verdict .chip{
+  font-family:var(--display);font-weight:800;font-size:1.28rem;letter-spacing:.01em;
+  color:var(--v,#7A8C93);display:flex;align-items:center;gap:8px;transition:color .35s ease;
 }
+.verdict .chip .spotname{font-family:var(--body);font-weight:600;font-size:.8rem;color:var(--ink-soft);letter-spacing:0}
+.verdict .reason{font-size:.9rem;color:var(--ink);line-height:1.3}
+.verdict .small{font-size:.72rem;color:var(--ink-soft)}
 
-.character-card:hover {
-transform: translateY(-4px);
-box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+/* ---------- Map ---------- */
+.map-wrap{position:relative;margin:0 12px;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+#map{height:52vh;min-height:320px;background:#DCE7E6}
+.map-controls{position:absolute;top:10px;right:10px;z-index:800;display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.toggle{
+  min-height:40px;padding:0 14px;border-radius:999px;border:1px solid var(--line);
+  background:rgba(255,255,255,.94);color:var(--ink);font-size:.82rem;font-weight:600;
+  display:flex;align-items:center;gap:6px;box-shadow:var(--shadow);
 }
-
-.love { border-color: #f472b6; }
-.hate { border-color: #f87171; }
-
-.modal {
-animation: modalPop 0.2s ease-out forwards;
+.toggle[aria-pressed="true"]{background:var(--water);border-color:var(--water);color:#fff}
+.locate-btn{
+  position:absolute;bottom:14px;right:10px;z-index:800;
+  width:48px;height:48px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(255,255,255,.96);box-shadow:var(--shadow);font-size:1.2rem;
 }
+/* Leaflet pin: verdict-coloured dot */
+.pin{width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35)}
+.pin.sel{transform:scale(1.35)}
+.user-dot{width:18px;height:18px;border-radius:50%;background:#2E6BFF;border:3px solid #fff;box-shadow:0 0 0 6px rgba(46,107,255,.22)}
+.p-mark{width:20px;height:20px;border-radius:5px;background:#3A6EA5;color:#fff;font:700 12px/20px var(--body);text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.s-mark{width:20px;height:20px;border-radius:50%;background:#0C4A52;color:#fff;font:700 11px/18px var(--body);text-align:center;border:2px solid #fff}
+.leaflet-container{font-family:var(--body)}
 
-@keyframes modalPop {
-from { transform: scale(0.9) translateY(20px); opacity: 0; }
-to { transform: scale(1) translateY(0); opacity: 1; }
+/* ---------- Conditions strip ---------- */
+.conditions{margin:10px 12px 14px}
+.cond-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.cell{
+  background:var(--card);border-radius:12px;box-shadow:var(--shadow);
+  padding:10px 8px;text-align:center;min-height:74px;
+  display:flex;flex-direction:column;justify-content:center;gap:2px;
 }
+.cell .k{font-size:.68rem;font-weight:600;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em}
+.cell .v{font-family:var(--display);font-weight:700;font-size:1.05rem;font-variant-numeric:tabular-nums}
+.cell .u{font-size:.68rem;color:var(--ink-soft)}
+.cell.warn .v{color:var(--caution)}
+.cell.bad  .v{color:var(--nogo)}
+.wind-arrow{display:inline-block;transition:transform .4s ease}
+.cond-foot{margin-top:6px;font-size:.72rem;color:var(--ink-soft);text-align:center}
 
-.action-btn {
-transition: all 0.1s ease;
+/* ---------- Detail bottom sheet ---------- */
+.sheet-backdrop{
+  position:fixed;inset:0;background:rgba(14,42,50,.35);z-index:900;
+  opacity:0;pointer-events:none;transition:opacity .25s ease;
 }
-
-.action-btn:active {
-transform: scale(0.95);
+.sheet{
+  position:fixed;left:0;right:0;bottom:0;z-index:901;
+  background:var(--card);border-radius:20px 20px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.2);
+  max-height:82vh;overflow-y:auto;overscroll-behavior:contain;
+  transform:translateY(105%);transition:transform .3s ease;
+  padding:8px 16px calc(18px + env(safe-area-inset-bottom));
 }
-
-.prison-bg {
-background: linear-gradient(145deg, #1a1530, #0f0a1f);
+body.sheet-open .sheet{transform:translateY(0)}
+body.sheet-open .sheet-backdrop{opacity:1;pointer-events:auto}
+.sheet .grab{width:44px;height:5px;border-radius:3px;background:var(--line);margin:4px auto 10px}
+.sheet h2{font-family:var(--display);font-weight:800;font-size:1.25rem;margin:0 0 2px;letter-spacing:-.01em}
+.sheet .sub{font-size:.85rem;color:var(--ink-soft);margin-bottom:10px}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.badge{font-size:.72rem;font-weight:600;padding:4px 10px;border-radius:999px;background:var(--paper);border:1px solid var(--line);color:var(--ink)}
+.factor{display:flex;gap:8px;align-items:flex-start;font-size:.86rem;margin:6px 0}
+.factor .dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;margin-top:4px}
+.kv{font-size:.86rem;margin:8px 0;line-height:1.45}
+.kv b{font-weight:700}
+.hazard{background:#FBEFE9;border:1px solid #F0CFC0;border-radius:10px;padding:8px 10px;font-size:.85rem;margin:8px 0}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0 4px}
+.act{
+  min-height:48px;border-radius:12px;border:1px solid var(--line);background:var(--paper);
+  font-weight:700;font-size:.86rem;color:var(--water-deep);
+  display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;padding:6px 8px;text-align:center;
 }
+.act.primary{background:var(--water);border-color:var(--water);color:#fff}
+.parking-list{margin:8px 0 0;padding:0;list-style:none}
+.parking-list li{font-size:.84rem;padding:8px 0;border-top:1px solid var(--line)}
+.muted{color:var(--ink-soft);font-size:.8rem}
+.sheet .close{position:absolute;top:10px;right:12px}
 
-.stat-label {
-font-size: 0.75rem;
-font-weight: 500;
+/* ---------- Info modal ---------- */
+.modal{
+  position:fixed;inset:0;z-index:950;display:none;align-items:flex-end;justify-content:center;
+  background:rgba(14,42,50,.4);
+}
+.modal.open{display:flex}
+.modal .panel{
+  background:var(--card);border-radius:20px 20px 0 0;max-height:85vh;overflow-y:auto;
+  padding:16px 18px calc(20px + env(safe-area-inset-bottom));width:100%;max-width:640px;
+}
+.modal h2{font-family:var(--display);font-weight:800;margin:4px 0 8px}
+.modal h3{font-size:.95rem;margin:16px 0 4px}
+.modal p, .modal li{font-size:.86rem;line-height:1.5;color:var(--ink)}
+.modal .ver{font-size:.72rem;color:var(--ink-soft);margin-top:14px}
+
+/* ---------- Toast + skeleton ---------- */
+.toast{
+  position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
+  background:var(--ink);color:#fff;font-size:.82rem;padding:10px 16px;border-radius:999px;
+  z-index:990;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .3s;
+  max-width:88vw;text-align:center;
+}
+.toast.show{opacity:1}
+.skel{color:transparent!important;background:linear-gradient(90deg,#E4ECEB 25%,#F0F5F4 50%,#E4ECEB 75%);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:6px}
+@keyframes sk{from{background-position:200% 0}to{background-position:-200% 0}}
+
+@media (min-width:700px){
+  body{max-width:720px;margin:0 auto}
+  .sheet,.modal .panel{max-width:720px;margin:0 auto}
 }
 </style>
 </head>
-<body class="bg-[#0a0818] text-white">
-<div class="game-container mx-auto border border-[#2a2540] min-h-screen flex flex-col">
+<body>
 
-<!-- Header -->
-<div class="bg-[#1a1530] px-4 py-3 flex items-center justify-between border-b border-[#2a2540]">
-<div>
-<h1 class="text-2xl font-bold tracking-tight">愛恨監獄</h1>
-<p class="text-xs text-pink-400">他媽哥池 × The Sims</p>
-</div>
-<div class="text-right">
-<div class="text-sm font-medium" id="time-display">第 <span id="day">1</span> 日　<span id="hour">08</span>:00</div>
-<div class="text-[10px] text-gray-400">管理分數 <span id="score" class="font-bold text-pink-400">128</span></div>
-</div>
-</div>
+<header class="app">
+  <div class="brand">PaddleReady<span class="tag" id="s-tagline"></span></div>
+  <button class="icon-btn" id="btn-info" aria-label="Data sources and disclaimer">i</button>
+</header>
 
-<!-- Quick Action -->
-<div class="px-4 pt-3 pb-2 bg-[#1a1530]">
-<button onclick="advanceTime()"
-class="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 active:scale-[0.985] transition-all text-white font-semibold py-3 rounded-2xl flex items-center justify-center gap-x-2 shadow-lg">
-<i class="fa-solid fa-clock mr-2"></i>
-<span class="font-bold">前進 4 小時</span>
-</button>
-</div>
+<!-- Verdict banner -->
+<section class="verdict" id="verdict" aria-live="polite">
+  <div class="gauge"></div>
+  <div class="body">
+    <div class="chip"><span id="v-label" class="skel">—</span> <span class="spotname" id="v-spot"></span></div>
+    <div class="reason" id="v-reason">&nbsp;</div>
+    <div class="small" id="s-advisory"></div>
+  </div>
+</section>
 
-<!-- Tabs -->
-<div class="flex border-b border-[#2a2540] bg-[#1a1530]">
-<button onclick="switchTab(0)" id="tab-0"
-class="flex-1 py-3 text-sm font-medium border-b-2 border-pink-500 text-pink-400">居民列表</button>
-<button onclick="switchTab(1)" id="tab-1"
-class="flex-1 py-3 text-sm font-medium text-gray-400">創建角色</button>
-<button onclick="switchTab(2)" id="tab-2"
-class="flex-1 py-3 text-sm font-medium text-gray-400">日誌</button>
+<!-- Map -->
+<div class="map-wrap">
+  <div id="map" role="application" aria-label="Map of launch points"></div>
+  <div class="map-controls">
+    <button class="toggle" id="tg-sewage" aria-pressed="false">🟤 <span id="s-tg-sewage"></span></button>
+    <button class="toggle" id="tg-parking" aria-pressed="false">🅿️ <span id="s-tg-parking"></span></button>
+  </div>
+  <button class="locate-btn" id="btn-locate" aria-label="Find launch spots near me">📍</button>
 </div>
 
-<!-- Content Area -->
-<div class="flex-1 overflow-auto p-4" id="main-content">
+<!-- Conditions strip -->
+<section class="conditions">
+  <div class="cond-grid">
+    <div class="cell" id="c-wind"><div class="k" id="s-wind"></div><div class="v skel">—</div><div class="u"></div></div>
+    <div class="cell" id="c-gust"><div class="k" id="s-gust"></div><div class="v skel">—</div><div class="u"></div></div>
+    <div class="cell" id="c-rain"><div class="k" id="s-rain"></div><div class="v skel">—</div><div class="u"></div></div>
+    <div class="cell" id="c-river"><div class="k" id="s-river"></div><div class="v skel">—</div><div class="u"></div></div>
+  </div>
+  <div class="cond-foot" id="cond-foot"></div>
+</section>
 
-<!-- Residents Tab -->
-<div id="tab-content-0">
-<div class="flex justify-between items-center mb-3 px-1">
-<div>
-<span class="font-semibold">目前居民</span>
-<span id="resident-count" class="ml-2 text-xs bg-[#2a2540] px-2 py-0.5 rounded-full">0</span>
-</div>
-<button onclick="switchTab(1)"
-class="text-xs flex items-center gap-x-1 text-pink-400 hover:text-pink-300">
-<i class="fa-solid fa-plus"></i>
-<span>新增</span>
-</button>
-</div>
+<!-- Launch point detail bottom sheet -->
+<div class="sheet-backdrop" id="sheet-backdrop"></div>
+<section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="d-name">
+  <div class="grab"></div>
+  <button class="icon-btn close" id="btn-sheet-close" aria-label="Close">✕</button>
+  <h2 id="d-name">—</h2>
+  <div class="sub" id="d-sub"></div>
+  <div class="badges" id="d-badges"></div>
+  <div id="d-verdict"></div>
+  <div id="d-river" class="kv"></div>
+  <div id="d-parkinfo" class="kv"></div>
+  <div id="d-route" class="kv"></div>
+  <div id="d-hazards"></div>
+  <div id="d-notes" class="kv muted"></div>
+  <div class="actions" id="d-actions"></div>
+  <div id="d-parking-results"></div>
+</section>
 
-<div id="residents-grid" class="grid grid-cols-2 gap-3">
-<!-- Populated by JS -->
-</div>
-
-<div id="empty-state" class="hidden text-center py-10">
-<i class="fa-solid fa-user-slash text-5xl text-gray-600 mb-3"></i>
-<p class="text-gray-400">仲未有居民<br>快啲創建第一個角色啦！</p>
-</div>
-</div>
-
-<!-- Create Tab -->
-<div id="tab-content-1" class="hidden">
-<div class="bg-[#1a1530] rounded-3xl p-5 border border-[#2a2540]">
-<h3 class="font-bold mb-4 flex items-center gap-x-2">
-<i class="fa-solid fa-user-plus text-pink-400"></i>
-創建新角色
-</h3>
-
-<div class="space-y-4">
-<!-- Name -->
-<div>
-<label class="text-xs text-gray-400 block mb-1">角色名字</label>
-<input id="char-name" type="text" placeholder="例如：小美 / 阿強 / 老闆"
-class="w-full bg-[#2a2540] border border-[#3f3855] rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-pink-500">
+<!-- Info / disclaimer modal -->
+<div class="modal" id="modal" role="dialog" aria-modal="true">
+  <div class="panel">
+    <button class="icon-btn close" id="btn-modal-close" aria-label="Close" style="float:right">✕</button>
+    <h2 id="m-title"></h2>
+    <div id="m-body"></div>
+    <div class="ver" id="m-ver"></div>
+  </div>
 </div>
 
-<!-- Type -->
-<div>
-<label class="text-xs text-gray-400 block mb-1">呢個係...</label>
-<div class="grid grid-cols-2 gap-3">
-<button onclick="selectType('love')" id="type-love"
-class="flex items-center justify-center gap-x-2 py-3 rounded-2xl border-2 border-pink-500 bg-pink-950/30 text-pink-400">
-<i class="fa-solid fa-heart"></i>
-<span class="font-medium">❤️ 愛嘅人</span>
-</button>
-<button onclick="selectType('hate')" id="type-hate"
-class="flex items-center justify-center gap-x-2 py-3 rounded-2xl border-2 border-red-500 bg-red-950/30 text-red-400">
-<i class="fa-solid fa-skull"></i>
-<span class="font-medium">😠 憎嘅人</span>
-</button>
-</div>
-</div>
-
-<!-- Avatar -->
-<div>
-<label class="text-xs text-gray-400 block mb-1">頭像（選一個）</label>
-<div id="emoji-picker" class="grid grid-cols-6 gap-2 bg-[#2a2540] p-3 rounded-2xl">
-<!-- Populated by JS -->
-</div>
-</div>
-
-<button onclick="createCharacter()"
-class="mt-2 w-full bg-white text-black font-bold py-3.5 rounded-2xl active:scale-[0.985] transition">
-確認放入監獄 / Haven
-</button>
-</div>
-</div>
-</div>
-
-<!-- Log Tab -->
-<div id="tab-content-2" class="hidden">
-<div class="bg-[#1a1530] rounded-3xl p-4 border border-[#2a2540] min-h-[300px]">
-<div class="flex justify-between items-center mb-3">
-<span class="font-semibold">事件日誌</span>
-<button onclick="clearLogs()" class="text-xs text-red-400 hover:text-red-300">清除</button>
-</div>
-<div id="log-list" class="space-y-2 text-sm max-h-[420px] overflow-auto pr-1">
-<!-- Logs populated by JS -->
-</div>
-</div>
-</div>
-
-</div>
-
-<!-- Footer hint -->
-<div class="text-center py-2 text-[10px] text-gray-500 border-t border-[#2a2540]">
-數據自動儲存 • 長按角色卡可快速照顧
-</div>
-</div>
-
-<!-- Character Detail Modal -->
-<div id="modal" onclick="if (event.target.id === 'modal') closeModal()"
-class="hidden fixed inset-0 bg-black/70 flex items-end md:items-center justify-center z-50">
-<div onclick="event.stopImmediatePropagation()"
-class="modal bg-[#1a1530] w-full md:w-[400px] md:rounded-t-3xl md:rounded-b-3xl rounded-t-3xl p-5 border-t border-[#2a2540]">
-
-<div class="flex justify-between items-start mb-4">
-<div id="modal-header" class="flex items-center gap-x-3"></div>
-<button onclick="closeModal()" class="text-2xl leading-none text-gray-400 hover:text-white">×</button>
-</div>
-
-<!-- Stats -->
-<div id="modal-stats" class="space-y-3 mb-5"></div>
-
-<!-- Actions -->
-<div>
-<div class="text-xs text-gray-400 mb-2 px-1">可執行行動</div>
-<div id="modal-actions" class="grid grid-cols-2 gap-2"></div>
-</div>
-
-<div class="mt-4 text-center">
-<button onclick="closeModal()"
-class="text-sm text-gray-400 hover:text-white">關閉</button>
-</div>
-</div>
-</div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
-// ==================== GAME DATA ====================
-let characters = [];
-let logs = [];
-let currentDay = 1;
-let currentHour = 8;
-let managementScore = 128;
-let selectedType = 'love';
-let selectedEmoji = '😊';
+'use strict';
+/* =========================================================================
+ * PaddleReady — UK SUP pre-trip dashboard (MVP)
+ * Single-file vanilla app. Sections:
+ *   S0 CONFIG / THRESHOLDS / STRINGS      S5 Verdict engine
+ *   S1 LAUNCH_POINTS (static, curated)    S6 Map layer
+ *   S2 Utilities                          S7 UI render
+ *   S3 Cache layer (localStorage)         S8 Events + boot
+ *   S4 API layer (independent, degradable) S9 PWA (manifest + SW hook)
+ * Every data layer degrades on its own: a failed fetch dims one widget,
+ * never the page.
+ * ======================================================================= */
 
-const EMOJIS = ['😊','👩','🧔','👨','👩‍🦰','🧔‍♀️','😈','🥰','😡','🤠','👻','🐱','🐶','🦊','🐼'];
+/* ============================== S0 CONFIG =============================== */
+const CONFIG = {
+  APP_VERSION: 'v0.1.1 (2026-07-06)',
 
-function loadData() {
-const saved = localStorage.getItem('lovehate_prison');
-if (saved) {
-const data = JSON.parse(saved);
-characters = data.characters || [];
-logs = data.logs || [];
-currentDay = data.currentDay || 1;
-currentHour = data.currentHour || 8;
-managementScore = data.managementScore || 128;
-} else {
-// First time - add 2 example characters
-characters = [
-{
-id: Date.now(),
-name: "小美",
-type: "love",
-emoji: "🥰",
-hunger: 85, happiness: 92, energy: 78, hygiene: 88, social: 95,
-lastUpdate: Date.now()
-},
-{
-id: Date.now() + 1,
-name: "阿強",
-type: "hate",
-emoji: "😡",
-hunger: 60, happiness: 35, energy: 55, hygiene: 40, social: 30,
-lastUpdate: Date.now()
-}
- ];
-addLog("歡迎來到愛恨監獄！小美（愛的人）同阿強（憎的人）已經入住。");
-saveData();
-}
-updateUI();
-}
+  /* Feature flags — flip any layer off without touching its code. */
+  FEATURES: { weather: true, river: true, sewage: true, parking: true },
 
-function saveData() {
-localStorage.setItem('lovehate_prison', JSON.stringify({
-characters, logs, currentDay, currentHour, managementScore
-}));
-}
+  /* Open-Meteo — free, no key, CORS-enabled. */
+  WEATHER_URL: (lat, lng) =>
+    'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng +
+    '&current=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code' +
+    '&hourly=precipitation,wind_speed_10m,wind_gusts_10m' +
+    '&wind_speed_unit=mph&timezone=Europe%2FLondon&past_days=1&forecast_days=2',
 
-function addLog(text) {
-logs.unshift({
-time: ${currentDay}日 ${currentHour.toString().padStart(2,'0')}:00,
-text: text
-});
-if (logs.length > 30) logs.pop();
-saveData();
-}
+  /* Environment Agency real-time flood-monitoring API — England only,
+     free, open, no key. Designed for browser use (CORS enabled). */
+  EA_BASE: 'https://environment.data.gov.uk/flood-monitoring/',
+  EA_STATION_SEARCH_KM: 10,
 
-// ==================== UI ====================
-function updateUI() {
-// Time
-document.getElementById('day').textContent = currentDay;
-document.getElementById('hour').textContent = currentHour.toString().padStart(2, '0');
-document.getElementById('score').textContent = managementScore;
+  /* Storm-overflow downstream-impact GeoJSON (sewagemap.co.uk, CC-BY-SA).
+     TODO: user to add the URL — copy the "Downstream impacted reaches
+     (incl. last 48 hrs)" link for Severn Trent (or the company covering
+     your area) from the "Water Company Data Table" in the README at
+     https://github.com/AlexLipp/sewage-map
+     Confirmed from that repo's backend source: files live in S3 bucket
+     "thamessewage" behind CloudFront at keys like
+       downstream_impact/severntrent/severntrent_now_incl_48hrs.geojson
+     (WGS84 FeatureCollection, refreshed ~every 15–20 min). The public
+     CloudFront hostname is deliberately NOT guessed here — paste the
+     exact link from the README table. Leave blank to disable the layer;
+     everything else keeps working. */
+  SEWAGE_GEOJSON_URL: '',   // TODO: user to add URL (see note above)
 
-// Residents count
-document.getElementById('resident-count').textContent = characters.length;
+  /* Overpass API (OpenStreetMap) — community-run, CORS-enabled, rate-
+     limited. Only queried on demand + cached 24 h per spot. */
+  OVERPASS_URL: 'https://overpass-api.de/api/interpreter',
+  PARKING_RADIUS_M: 1000,
+  SLIPWAY_RADIUS_M: 800,
 
-// Render residents grid
-renderResidents();
+  /* What3Words — display links need no key. Live lat/long → W3W
+     conversion needs a key. Leave blank to fall back to a maps pin. */
+  W3W_API_KEY: '',          // TODO (optional): user to add key
 
-// Render logs if on that tab
-if (!document.getElementById('tab-content-2').classList.contains('hidden')) {
-renderLogs();
-}
-}
+  /* park4night hand-off. A coordinate deep-link format could not be
+     confirmed from official docs, so per spec we open the homepage.
+     Candidate to test by hand and swap in if it works:
+     'https://park4night.com/en/search?lat={lat}&lng={lng}'            */
+  PARK4NIGHT_URL: 'https://park4night.com',
 
-function renderResidents() {
-const container = document.getElementById('residents-grid');
-const empty = document.getElementById('empty-state');
+  /* Cache freshness windows (minutes). */
+  FRESH_MIN: { weather: 15, river: 15, sewage: 20, parking: 60 * 24 },
 
-container.innerHTML = '';
+  FETCH_TIMEOUT_MS: 10000,
+  OVERPASS_TIMEOUT_MS: 26000,
 
-if (characters.length === 0) {
-empty.classList.remove('hidden');
-return;
-}
-empty.classList.add('hidden');
+  /* Default view if geolocation is denied/unavailable: the Midlands. */
+  DEFAULT_CENTER: [52.19, -2.10],
+  DEFAULT_ZOOM: 9,
 
-characters.forEach(char => {
-const mood = getMood(char);
-const avg = Math.round((char.hunger + char.happiness + char.energy + char.hygiene + char.social) / 5);
-
-const div = document.createElement('div');
-div.className = character-card bg-[#1a1530] border-2 rounded-3xl p-3 cursor-pointer ${char.type === 'love' ? 'love border-pink-500' : 'hate border-red-500'}; div.innerHTML =
-<div class="flex justify-between items-start">
-<div class="text-5xl">${char.emoji}&lt;/div&gt; &lt;div class="text-right"&gt; &lt;div class="text-xs px-2 py-0.5 rounded-full ${char.type === 'love' ? 'bg-pink-950 text-pink-400' : 'bg-red-950 text-red-400'}">
-`${char.type === 'love' ? '❤️ Haven' : '😠 Prison'}
-</div>
-</div>
-</div>
-
-<div class="mt-2">
-<div class="font-bold text-lg leading-none">latex
-{char.name}&lt;/div&gt; &lt;div class="flex items-center gap-x-1 mt-1"&gt; &lt;div class="text-xs \( {mood.color}"&gt; \){mood.emoji} 
-
-{mood.text}</div>
-<div class="text-[10px] text-gray-400">($`{avg}%)</div>
-</div>
-</div>
-
-<div class="mt-3 space-y-1.5">
-${createMiniStat('飢餓', char.hunger, '#f59e0b')} ${createMiniStat('快樂', char.happiness, '#ec4899')}
-</div>
-`;
-
-div.onclick = () => openModal(char.id);
-// Long press for quick care
-let pressTimer;
-div.onmousedown = () => {
-pressTimer = setTimeout(() => quickCare(char.id), 600);
-};
-div.onmouseup = () => clearTimeout(pressTimer);
-div.ontouchstart = () => {
-pressTimer = setTimeout(() => quickCare(char.id), 600);
-};
-div.ontouchend = () => clearTimeout(pressTimer);
-
-container.appendChild(div);
-});
-}
-
-function createMiniStat(label, value, color) {
-return &lt;div class="flex items-center gap-x-2 text-xs"&gt; &lt;span class="w-8 text-gray-400"&gt;${label}</span>
-<div class="flex-1 stat-bar">
-<div class="stat-fill" style="width: {color}"></div>
-</div>
-<span class="w-7 text-right font-mono">${value}&lt;/span&gt; &lt;/div&gt;;
-}
-
-function getMood(char) {
-const avg = (char.hunger + char.happiness + char.energy + char.hygiene + char.social) / 5;
-if (avg >= 85) return { emoji: '😍', text: '非常滿足', color: 'text-pink-400' };
-if (avg >= 65) return { emoji: '🙂', text: '狀態不錯', color: 'text-emerald-400' };
-if (avg >= 40) return { emoji: '😐', text: '一般', color: 'text-yellow-400' };
-return { emoji: '😫', text: '需要照顧', color: 'text-red-400' };
-}
-
-// ==================== TABS ====================
-function switchTab(tab) {
-// Hide all
-document.querySelectorAll('[id^="tab-content-"]').forEach(el => el.classList.add('hidden'));
-document.querySelectorAll('[id^="tab-"]').forEach(el => {
-el.classList.remove('border-b-2', 'border-pink-500', 'text-pink-400');
-el.classList.add('text-gray-400');
-});
-
-// Show selected
-document.getElementById(tab-content-${tab}).classList.remove('hidden'); const tabBtn = document.getElementById(tab-${tab});
-tabBtn.classList.add('border-b-2', 'border-pink-500', 'text-pink-400');
-tabBtn.classList.remove('text-gray-400');
-
-if (tab === 2) renderLogs();
-}
-
-function renderLogs() {
-const container = document.getElementById('log-list');
-container.innerHTML = '';
-
-if (logs.length === 0) {
-container.innerHTML = <p class="text-center text-gray-500 py-8 text-sm"&gt;仲未有事件...&lt;/p>;
-return;
-}
-
-logs.forEach(log => {
-const div = document.createElement('div');
-div.className = 'bg-[#2a2540] px-3 py-2 rounded-2xl text-sm';
-div.innerHTML = &lt;span class="font-mono text-[10px] text-gray-500"&gt;${log.time}</span><br>
-<span>${log.text}&lt;/span&gt;;
-container.appendChild(div);
-});
-}
-
-function clearLogs() {
-if (confirm('確定清除所有日誌？')) {
-logs = [];
-saveData();
-renderLogs();
-}
-}
-
-// ==================== CREATE CHARACTER ====================
-function initEmojiPicker() {
-const picker = document.getElementById('emoji-picker');
-picker.innerHTML = '';
-
-EMOJIS.forEach(emoji => {
-const btn = document.createElement('button');
-btn.className = text-3xl p-1.5 rounded-xl hover:bg-[#3f3855] transition${emoji === selectedEmoji ? 'bg-pink-600' : ''}`;
-btn.textContent = emoji;
-btn.onclick = () => {
-selectedEmoji = emoji;
-// refresh picker
-initEmojiPicker();
-};
-picker.appendChild(btn);
-});
-}
-
-function selectType(type) {
-selectedType = type;
-
-const loveBtn = document.getElementById('type-love');
-const hateBtn = document.getElementById('type-hate');
-
-if (type === 'love') {
-loveBtn.classList.add('border-pink-500', 'bg-pink-950/30');
-hateBtn.classList.remove('border-red-500', 'bg-red-950/30');
-} else {
-hateBtn.classList.add('border-red-500', 'bg-red-950/30');
-loveBtn.classList.remove('border-pink-500', 'bg-pink-950/30');
-}
-}
-
-function createCharacter() {
-const nameInput = document.getElementById('char-name').value.trim();
-if (!nameInput) {
-alert('請輸入角色名字！');
-return;
-}
-
-const newChar = {
-id: Date.now(),
-name: nameInput,
-type: selectedType,
-emoji: selectedEmoji,
-hunger: selectedType === 'love' ? 85 : 55,
-happiness: selectedType === 'love' ? 90 : 40,
-energy: 75,
-hygiene: selectedType === 'love' ? 80 : 50,
-social: selectedType === 'love' ? 85 : 35,
-lastUpdate: Date.now()
+  DEBUG: false
 };
 
-characters.push(newChar);
+/* Every verdict threshold lives here — tune without touching logic.
+   Flat-water SUP defaults, wind in mph, rain in mm, river relative to the
+   station's EA typical range. */
+const THRESHOLDS = {
+  gustMph:   { amberAt: 12, redAt: 18 },   // ≤12 green · 12–18 amber · >18 red
+  windMph:   { amberAt: 10, redAt: 15 },   // ≤10 green · 10–15 amber · >15 red
+  rain:      { last24hMm: 8, next6hMm: 2 },// either exceeded → amber
+  river:     { redAboveHighFactor: 1.2 },  // >120 % of typicalRangeHigh → red
+  sewage:    { proximityKm: 1.5 }          // impacted reach within → amber flag
+};
 
-const wing = selectedType === 'love' ? 'Haven Wing（愛之翼）' : 'Prison Wing（憎之翼）';
-addLog(新角色「\( {nameInput}」已加入 \){wing}。);
+/* All user-facing text. Add a second language by cloning STRINGS.en. */
+const STRINGS = {
+  en: {
+    tagline: 'Go or no-go, before you leave home',
+    advisory: 'Advisory only — conditions change fast. Your call on the water.',
+    loading: 'Checking conditions…',
+    verdict: { go: 'GO', caution: 'CAUTION', nogo: 'NO-GO', unknown: 'NO DATA' },
+    verdictEmoji: { go: '🟢', caution: '🟡', nogo: '🔴', unknown: '⚪️' },
+    nearestSpot: 'Nearest spot',
+    selectedSpot: 'Selected spot',
+    reasons: {
+      allClear: 'Wind, river and rain all look friendly right now.',
+      gustAmber: 'gusts {v} mph', gustRed: 'gusts {v} mph — above the red line',
+      windAmber: 'steady wind {v} mph', windRed: 'steady wind {v} mph — above the red line',
+      rain24: '{v} mm of rain in the last 24 h (rivers rise, overflow risk up)',
+      rain6: 'rain forecast in the next 6 h',
+      riverAmber: 'river above its typical range ({v} m)',
+      riverRed: 'river well above its typical range ({v} m)',
+      riverLowNote: 'river below its typical low ({v} m) — watch for shallows',
+      sewage: 'storm overflow recently active nearby — check conditions yourself',
+      noData: 'Live data unavailable — showing what we know.'
+    },
+    cells: { wind: 'Wind', gust: 'Gusts', rain: 'Rain 6 h', river: 'River' },
+    mph: 'mph', mm: 'mm', metres: 'm',
+    riverNormal: 'normal', riverHigh: 'high', riverVeryHigh: 'very high', riverLow: 'low',
+    riverNoRange: 'no typical range available',
+    riverUnavailable: 'River level unavailable for this spot.',
+    gauge: 'gauge', gaugeAuto: 'nearest gauge (auto)',
+    updated: 'Updated {t}',
+    staleNote: "Couldn't refresh — showing {t} data.",
+    offline: 'Offline — showing last-known data.',
+    toggles: { sewage: 'Sewage', parking: 'Car parks' },
+    sewageUnconfigured: 'Sewage layer not set up yet — add the data URL in CONFIG (see the info panel).',
+    sewageUnavailable: "Couldn't load the sewage overlay right now.",
+    sewageLegend: 'Brown = river reaches downstream of a storm overflow active in the last 48 h (sewagemap.co.uk).',
+    locating: 'Finding you…',
+    locateDenied: 'No location — browse the map and tap a pin instead.',
+    distanceAway: '{v} km away',
+    launchType: { slipway: 'Slipway', riverbank: 'Riverbank', steps: 'Steps', beach: 'Beach' },
+    difficulty: { easy: 'Easy', moderate: 'Moderate', hard: 'Hard' },
+    whyVerdict: 'Why this verdict',
+    parkingHeading: 'Parking',
+    free: 'free', paid: 'paid',
+    route: 'Route', hazards: 'Hazards', notes: 'Notes',
+    actions: {
+      w3w: 'What3Words', directions: 'Directions',
+      carparks: 'Nearby car parks', overnight: 'Overnight (park4night)',
+      share: 'Share spot', shareMyLoc: 'Share my location'
+    },
+    slipway: 'Slipway',
+    parkingNone: 'No parking data from OpenStreetMap here.',
+    parkingLoading: 'Asking OpenStreetMap…',
+    parkingError: "Couldn't reach OpenStreetMap parking data just now.",
+    slipwaysFound: 'Slipways nearby: {v}',
+    copied: 'Link copied.',
+    shareFail: "Couldn't share — link copied instead.",
+    infoTitle: 'Data & disclaimer',
+    verdictLegendTitle: 'How the verdict works',
+    placeholderNote: 'Example spot — details unverified. Check before you rely on them.',
+    info: {
+      p1: 'PaddleReady gives informational estimates only. It fuses public weather, river-level and storm-overflow data into a convenience summary. It is not a safety assessment and it can be wrong. Conditions on the water change rapidly — you are responsible for your own judgement, your own safety, and for holding a valid waterways licence where required.',
+      p2: 'Storm-overflow data never means water is "safe" or "unsafe". Sensors can false-trigger and the data carries no volume or concentration information. A flag simply means: a storm overflow was recorded active on this water body recently — check conditions yourself.',
+      attribution: 'Attribution',
+      a1: 'This uses Environment Agency flood and river level data from the real-time data API (Beta).',
+      a2: 'Storm-overflow downstream-impact data: sewagemap.co.uk (CC-BY-SA).',
+      a3: 'Weather: Open-Meteo.com. Map data © OpenStreetMap contributors. Parking/slipways via Overpass API.',
+      howTitle: 'How the Go / No-Go verdict works',
+      how: 'Each spot is scored on wind gusts, steady wind, recent + forecast rain, river level against the gauge\'s typical range, and nearby storm-overflow activity. The overall verdict is simply the worst contributing factor, and the reasons are always shown. Thresholds are flat-water SUP defaults and can be tuned in the app\'s CONFIG.'
+    }
+  }
+};
+let LANG = 'en';
+const t = (path, vars) => {
+  let s = path.split('.').reduce((o, k) => (o || {})[k], STRINGS[LANG]);
+  if (typeof s !== 'string') return path;
+  if (vars) for (const k in vars) s = s.replace('{' + k + '}', vars[k]);
+  return s;
+};
 
-// Reset form
-document.getElementById('char-name').value = '';
-selectedEmoji = '😊';
-selectedType = 'love';
-initEmojiPicker();
-selectType('love');
+/* ========================== S1 LAUNCH POINTS ============================ */
+/* Static curated list. Copy a block, fill it in, done — no other code
+   changes needed. `eaStationRef` pins the correct river gauge to the spot;
+   leave "" and the app auto-picks the nearest level gauge instead.       */
+const LAUNCH_POINTS = [
+  {
+    id: 'severn-worcester-01',
+    name: 'Worcester Riverside (Pitchcroft)',   // PLACEHOLDER — owner to verify/replace
+    lat: 52.1975,                                // PLACEHOLDER — approx only
+    lng: -2.2245,                                // PLACEHOLDER — approx only
+    w3w: '',                                     // PLACEHOLDER — owner to fill (not fabricated)
+    waterway: 'River Severn',
+    eaStationRef: '',      // owner/app to fill — blank = auto nearest gauge
+    parking: { name: 'Pitchcroft / Croft Rd area', postcode: 'WR1 3NZ', type: 'paid' }, // PLACEHOLDER
+    launchType: 'riverbank',
+    difficulty: 'easy',
+    route: 'Upstream toward Bevere Lock (calmer) or downstream past the cathedral.',
+    hazards: 'Rowing club traffic; Diglis weir well downstream — stay upstream of the lock.',
+    notes: 'Busy on race days at the racecourse.',
+    placeholder: true
+  },
+  {
+    id: 'severn-stourport-01',
+    name: 'Stourport-on-Severn Riverside',       // PLACEHOLDER — owner to verify/replace
+    lat: 52.3355,                                // PLACEHOLDER — approx only
+    lng: -2.2830,                                // PLACEHOLDER — approx only
+    w3w: '',                                     // PLACEHOLDER — owner to fill
+    waterway: 'River Severn',
+    eaStationRef: '',
+    parking: { name: 'Riverside Meadows car park', postcode: 'DY13 9QR', type: 'paid' }, // PLACEHOLDER
+    launchType: 'slipway',
+    difficulty: 'moderate',
+    route: 'Downstream toward Lincomb Lock, or link to the Staffs & Worcs canal basin.',
+    hazards: 'Flow picks up quickly after rain; powered craft near the basins.',
+    notes: 'Funfair crowds in summer weekends.',
+    placeholder: true
+  },
+  {
+    id: 'avon-stratford-01',
+    name: 'Stratford-upon-Avon Rec Ground',      // PLACEHOLDER — owner to verify/replace
+    lat: 52.1900,                                // PLACEHOLDER — approx only
+    lng: -1.7040,                                // PLACEHOLDER — approx only
+    w3w: '',                                     // PLACEHOLDER — owner to fill
+    waterway: 'River Avon (Warwickshire)',
+    eaStationRef: '',
+    parking: { name: 'Recreation Ground car park', postcode: 'CV37 6XB', type: 'paid' }, // PLACEHOLDER
+    launchType: 'riverbank',
+    difficulty: 'easy',
+    route: 'Upstream past Holy Trinity toward Alveston (flat, tree-lined) — good 12 km out-and-back.',
+    hazards: 'Colin P Witter weir by the tramway bridge — launch upstream side; heavy hire-boat traffic midsummer.',
+    notes: 'Very popular; early starts beat the crowds and the wind.',
+    placeholder: true
+  },
+  {
+    id: 'avon-evesham-01',
+    name: 'Evesham Weir Meadow',                 // PLACEHOLDER — owner to verify/replace
+    lat: 52.0890,                                // PLACEHOLDER — approx only
+    lng: -1.9460,                                // PLACEHOLDER — approx only
+    w3w: '',                                     // PLACEHOLDER — owner to fill
+    waterway: 'River Avon (Warwickshire)',
+    eaStationRef: '',
+    parking: { name: 'Crown Meadow car park', postcode: 'WR11 4SB', type: 'paid' },      // PLACEHOLDER
+    launchType: 'riverbank',
+    difficulty: 'easy',
+    route: 'Upstream through the town reach toward Offenham — sheltered from westerlies.',
+    hazards: 'Evesham weir — keep to the lock channel side; portage at Chadbury.',
+    notes: 'Avon Navigation Trust licence applies on the Avon.',
+    placeholder: true
+  }
+];
 
-saveData();
-updateUI();
-switchTab(0); // back to list
+/* ============================ S2 UTILITIES ============================== */
+const $ = (sel) => document.querySelector(sel);
+const dbg = (...a) => { if (CONFIG.DEBUG) console.log('[PR]', ...a); };
+
+function haversineKm(aLat, aLng, bLat, bLng) {
+  const R = 6371, toR = Math.PI / 180;
+  const dLat = (bLat - aLat) * toR, dLng = (bLng - aLng) * toR;
+  const h = Math.sin(dLat / 2) ** 2 +
+            Math.cos(aLat * toR) * Math.cos(bLat * toR) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-// ==================== MODAL & ACTIONS ====================
-let currentCharId = null;
+/* Compass letters describe where the wind comes FROM (met convention);
+   the arrow is rotated to point where the wind is travelling TO, which is
+   what a paddler intuitively reads. */
+const COMPASS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+const compassFrom = (deg) => COMPASS[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
 
-function openModal(id) {
-currentCharId = id;
-const char = characters.find(c => c.id === id);
-if (!char) return;
+const fmtTime = (ms) => new Date(ms).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+const round1 = (n) => Math.round(n * 10) / 10;
 
-const modal = document.getElementById('modal');
-const header = document.getElementById('modal-header');
-const statsContainer = document.getElementById('modal-stats');
-const actionsContainer = document.getElementById('modal-actions');
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g,
+    (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
-// Header
-header.innerHTML = &lt;div class="text-6xl"&gt;${char.emoji}</div>
-<div>
-<div class="font-bold text-2xl">${char.name}&lt;/div&gt; &lt;div class="text-sm ${char.type === 'love' ? 'text-pink-400' : 'text-red-400'}">
-${char.type === 'love' ? '❤️ Haven Wing' : '😠 Prison Wing'} &lt;/div&gt; &lt;/div&gt;;
+let toastTimer = null;
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3800);
+}
 
-// Stats
-statsContainer.innerHTML = ${createStatRow('飢餓', char.hunger, '#f59e0b', 'fa-utensils')}
-${createStatRow('快樂', char.happiness, '#ec4899', 'fa-heart')} ${createStatRow('精力', char.energy, '#3b82f6', 'fa-bolt')}
-${createStatRow('衛生', char.hygiene, '#14b8a6', 'fa-shower')} ${createStatRow('社交', char.social, '#8b5cf6', 'fa-users')}
-`;
+/* =========================== S3 CACHE LAYER ============================= */
+const cache = {
+  set(key, value) {
+    try { localStorage.setItem('pr:' + key, JSON.stringify({ t: Date.now(), v: value })); }
+    catch (e) { dbg('cache set failed', e); /* quota — fail quietly */ }
+  },
+  get(key) {
+    try {
+      const raw = localStorage.getItem('pr:' + key);
+      if (!raw) return null;
+      const { t: at, v } = JSON.parse(raw);
+      return { at, value: v };
+    } catch (e) { return null; }
+  }
+};
 
-// Actions (different for love/hate)
-actionsContainer.innerHTML = '';
+/* Cache-first fetch: fresh cache → instant; else network → update cache;
+   network fail → stale cache (flagged) → else null.                     */
+async function cachedFetch(key, freshMinutes, fetcher) {
+  const hit = cache.get(key);
+  const freshMs = freshMinutes * 60 * 1000;
+  if (hit && Date.now() - hit.at < freshMs) {
+    return { value: hit.value, at: hit.at, stale: false, source: 'cache' };
+  }
+  try {
+    const value = await fetcher();
+    cache.set(key, value);
+    return { value, at: Date.now(), stale: false, source: 'network' };
+  } catch (e) {
+    dbg('fetch failed for', key, e.message);
+    if (hit) return { value: hit.value, at: hit.at, stale: true, source: 'stale' };
+    return null;
+  }
+}
 
-const actions = char.type === 'love' ? [
-{ label: '餵食', icon: 'fa-utensils', change: {hunger: 18, energy: -4} },
-{ label: '聊天', icon: 'fa-comments', change: {happiness: 15, social: 12} },
-{ label: '送禮物', icon: 'fa-gift', change: {happiness: 22, energy: -8} },
-{ label: '按摩', icon: 'fa-hand-holding-heart', change: {happiness: 18, energy: 10} },
- ] : [
-{ label: '餵食', icon: 'fa-utensils', change: {hunger: 15} },
-{ label: '訓話', icon: 'fa-comment-dots', change: {happiness: -8, social: 5} },
-{ label: '罰做工', icon: 'fa-hammer', change: {energy: -15, hunger: -5, hygiene: -8} },
-{ label: '給予反思時間', icon: 'fa-user-clock', change: {happiness: 12, energy: 8} },
- ];
+/* ============================ S4 API LAYER ============================== */
+async function fetchJSON(url, opts = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeout || CONFIG.FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      body: opts.body || null,
+      headers: opts.headers || {},
+      signal: ctrl.signal
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } finally { clearTimeout(timer); }
+}
 
-actions.forEach(action => {
-const btn = document.createElement('button');
-btn.className = action-btn flex items-center justify-center gap-x-2 bg-[#2a2540] hover:bg-[#3f3855] active:bg-[#4a425f] px-3 py-3 rounded-2xl text-sm font-medium;
-btn.innerHTML = &lt;i class="fa-solid${action.icon} w-4"></i>
-<span>${action.label}&lt;/span&gt;;
-btn.onclick = () => performAction(id, action.change, action.label);
-actionsContainer.appendChild(btn);
+/* ---- 4a. Weather (Open-Meteo) ---- */
+async function getWeather(spot) {
+  if (!CONFIG.FEATURES.weather) return null;
+  return cachedFetch('wx:' + spot.id, CONFIG.FRESH_MIN.weather, async () => {
+    const data = await fetchJSON(CONFIG.WEATHER_URL(spot.lat, spot.lng));
+    const cur = data.current || {};
+    /* Derive trailing-24 h and next-6 h precipitation from the hourly
+       series (past_days=1 gives us yesterday). */
+    let rain24 = null, rain6 = null;
+    const H = data.hourly;
+    if (H && H.time && H.precipitation) {
+      const now = Date.now();
+      let idx = -1;
+      for (let i = 0; i < H.time.length; i++) {
+        if (new Date(H.time[i]).getTime() <= now) idx = i; else break;
+      }
+      if (idx >= 0) {
+        rain24 = 0;
+        for (let i = Math.max(0, idx - 23); i <= idx; i++) rain24 += H.precipitation[i] || 0;
+        rain6 = 0;
+        for (let i = idx + 1; i <= Math.min(H.time.length - 1, idx + 6); i++) rain6 += H.precipitation[i] || 0;
+        rain24 = round1(rain24); rain6 = round1(rain6);
+      }
+    }
+    return {
+      tempC: cur.temperature_2m, rainNowMm: cur.precipitation,
+      windMph: cur.wind_speed_10m, gustMph: cur.wind_gusts_10m,
+      windDirDeg: cur.wind_direction_10m,
+      rain24hMm: rain24, rainNext6hMm: rain6
+    };
+  });
+}
+
+/* ---- 4b. River level (Environment Agency, England only) ---- */
+function eaNum(x) { return Array.isArray(x) ? x[0] : x; }
+
+async function findNearestStation(spot) {
+  const url = CONFIG.EA_BASE + 'id/stations?parameter=level&lat=' + spot.lat +
+              '&long=' + spot.lng + '&dist=' + CONFIG.EA_STATION_SEARCH_KM + '&_limit=50';
+  const data = await fetchJSON(url);
+  const items = (data.items || []).filter((s) => s.stationReference && s.lat != null);
+  if (!items.length) return null;
+  items.sort((a, b) =>
+    haversineKm(spot.lat, spot.lng, eaNum(a.lat), eaNum(a.long)) -
+    haversineKm(spot.lat, spot.lng, eaNum(b.lat), eaNum(b.long)));
+  return items[0].stationReference;
+}
+
+async function getRiver(spot) {
+  if (!CONFIG.FEATURES.river) return null;
+  return cachedFetch('ea:' + spot.id, CONFIG.FRESH_MIN.river, async () => {
+    const ref = spot.eaStationRef || await findNearestStation(spot);
+    if (!ref) return { unavailable: true };
+    const auto = !spot.eaStationRef;
+
+    const [det, latest] = await Promise.all([
+      fetchJSON(CONFIG.EA_BASE + 'id/stations/' + encodeURIComponent(ref) + '.json'),
+      fetchJSON(CONFIG.EA_BASE + 'id/stations/' + encodeURIComponent(ref) + '/readings?latest')
+    ]);
+    const st = det.items || {};
+    const scale = st.stageScale || {};
+    /* Prefer the main stage level measure if several exist. */
+    const readings = latest.items || [];
+    const pick = readings.find((r) => /level/.test(r.measure) && /-stage-/.test(r.measure)) ||
+                 readings.find((r) => /level/.test(r.measure)) || readings[0];
+    return {
+      unavailable: !pick,
+      stationRef: ref, auto,
+      stationLabel: st.label || ref,
+      riverName: st.riverName || '',
+      valueM: pick ? pick.value : null,
+      readAt: pick ? pick.dateTime : null,
+      typicalHigh: scale.typicalRangeHigh != null ? eaNum(scale.typicalRangeHigh) : null,
+      typicalLow: scale.typicalRangeLow != null ? eaNum(scale.typicalRangeLow) : null
+    };
+  });
+}
+
+/* ---- 4c. Storm overflows (sewagemap.co.uk downstream-impact GeoJSON) ---- */
+async function getSewage() {
+  if (!CONFIG.FEATURES.sewage) return { status: 'off' };
+  if (!CONFIG.SEWAGE_GEOJSON_URL) return { status: 'unconfigured' };
+  const res = await cachedFetch('sewage', CONFIG.FRESH_MIN.sewage,
+    () => fetchJSON(CONFIG.SEWAGE_GEOJSON_URL, { timeout: 15000 }));
+  if (!res) return { status: 'error' };
+  return { status: 'ok', fc: res.value, at: res.at, stale: res.stale };
+}
+
+/* Is any impacted reach within THRESHOLDS.sewage.proximityKm of the spot?
+   Cheap two-stage test: a degree-window prefilter, then point→segment
+   distance on a local equirectangular projection.                        */
+function sewageNearSpot(fc, spot) {
+  if (!fc || !fc.features) return null;
+  const limKm = THRESHOLDS.sewage.proximityKm;
+  const latWin = limKm / 110.5, lngWin = limKm / (111.3 * Math.cos(spot.lat * Math.PI / 180));
+  const mPerLat = 110540, mPerLng = 111320 * Math.cos(spot.lat * Math.PI / 180);
+  const limM = limKm * 1000;
+
+  const px = 0, py = 0; // spot at local origin
+  const toXY = (lng, lat) => [(lng - spot.lng) * mPerLng, (lat - spot.lat) * mPerLat];
+
+  function segClose(a, b) {
+    const [ax, ay] = toXY(a[0], a[1]), [bx, by] = toXY(b[0], b[1]);
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let t2 = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+    t2 = Math.max(0, Math.min(1, t2));
+    const cx = ax + t2 * dx - px, cy = ay + t2 * dy - py;
+    return (cx * cx + cy * cy) <= limM * limM;
+  }
+  function scanLine(coords) {
+    for (let i = 0; i < coords.length - 1; i++) {
+      const a = coords[i], b = coords[i + 1];
+      /* prefilter: both ends well outside the window → skip */
+      if (Math.abs(a[1] - spot.lat) > latWin && Math.abs(b[1] - spot.lat) > latWin) continue;
+      if (Math.abs(a[0] - spot.lng) > lngWin && Math.abs(b[0] - spot.lng) > lngWin) continue;
+      if (segClose(a, b)) return true;
+    }
+    return false;
+  }
+  for (const f of fc.features) {
+    const g = f.geometry; if (!g) continue;
+    if (g.type === 'LineString' && scanLine(g.coordinates)) return true;
+    if (g.type === 'MultiLineString') {
+      for (const line of g.coordinates) if (scanLine(line)) return true;
+    }
+  }
+  return false;
+}
+
+/* ---- 4d. Parking + slipways (Overpass / OpenStreetMap) ---- */
+async function getParking(spot) {
+  if (!CONFIG.FEATURES.parking) return null;
+  return cachedFetch('park:' + spot.id, CONFIG.FRESH_MIN.parking, async () => {
+    const q = '[out:json][timeout:25];(' +
+      'node["amenity"="parking"](around:' + CONFIG.PARKING_RADIUS_M + ',' + spot.lat + ',' + spot.lng + ');' +
+      'way["amenity"="parking"](around:' + CONFIG.PARKING_RADIUS_M + ',' + spot.lat + ',' + spot.lng + ');' +
+      'node["leisure"="slipway"](around:' + CONFIG.SLIPWAY_RADIUS_M + ',' + spot.lat + ',' + spot.lng + ');' +
+      'way["leisure"="slipway"](around:' + CONFIG.SLIPWAY_RADIUS_M + ',' + spot.lat + ',' + spot.lng + ');' +
+      ');out center;';
+    const data = await fetchJSON(CONFIG.OVERPASS_URL, {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(q),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      timeout: CONFIG.OVERPASS_TIMEOUT_MS
+    });
+    const parking = [], slipways = [];
+    for (const el of (data.elements || [])) {
+      const lat = el.lat != null ? el.lat : (el.center && el.center.lat);
+      const lng = el.lon != null ? el.lon : (el.center && el.center.lon);
+      if (lat == null) continue;
+      const tags = el.tags || {};
+      const item = {
+        lat, lng,
+        name: tags.name || null,
+        fee: tags.fee || null,          // 'yes' | 'no' | null
+        access: tags.access || null,
+        km: round1(haversineKm(spot.lat, spot.lng, lat, lng))
+      };
+      if (tags.amenity === 'parking') parking.push(item);
+      else if (tags.leisure === 'slipway') slipways.push(item);
+    }
+    parking.sort((a, b) => a.km - b.km);
+    return { parking: parking.slice(0, 12), slipways: slipways.slice(0, 6) };
+  });
+}
+
+/* ---- 4e. What3Words (optional, key-gated live conversion) ---- */
+async function w3wForCoords(lat, lng) {
+  if (!CONFIG.W3W_API_KEY) return null;
+  try {
+    const d = await fetchJSON('https://api.what3words.com/v3/convert-to-3wa?coordinates=' +
+      lat + '%2C' + lng + '&key=' + encodeURIComponent(CONFIG.W3W_API_KEY));
+    return d.words || null;
+  } catch (e) { return null; }
+}
+
+/* ========================== S5 VERDICT ENGINE =========================== */
+const LEVEL_ORDER = { unknown: -1, go: 0, caution: 1, nogo: 2 };
+const worse = (a, b) => (LEVEL_ORDER[b] > LEVEL_ORDER[a] ? b : a);
+
+/* Fuse the live inputs for one spot into {level, reasons[], factors[]}.
+   Overall verdict = the worst contributing factor. Missing data never
+   worsens a verdict — it is surfaced as a note instead.                  */
+function assessSpot(wx, river, sewageNear) {
+  const factors = []; // {level:'go|caution|nogo', msg}
+  let sawData = false;
+
+  if (wx) {
+    sawData = true;
+    const g = wx.gustMph, w = wx.windMph;
+    if (g != null) {
+      if (g > THRESHOLDS.gustMph.redAt) factors.push({ level: 'nogo', msg: t('reasons.gustRed', { v: Math.round(g) }) });
+      else if (g > THRESHOLDS.gustMph.amberAt) factors.push({ level: 'caution', msg: t('reasons.gustAmber', { v: Math.round(g) }) });
+    }
+    if (w != null) {
+      if (w > THRESHOLDS.windMph.redAt) factors.push({ level: 'nogo', msg: t('reasons.windRed', { v: Math.round(w) }) });
+      else if (w > THRESHOLDS.windMph.amberAt) factors.push({ level: 'caution', msg: t('reasons.windAmber', { v: Math.round(w) }) });
+    }
+    if (wx.rain24hMm != null && wx.rain24hMm >= THRESHOLDS.rain.last24hMm)
+      factors.push({ level: 'caution', msg: t('reasons.rain24', { v: wx.rain24hMm }) });
+    if (wx.rainNext6hMm != null && wx.rainNext6hMm >= THRESHOLDS.rain.next6hMm)
+      factors.push({ level: 'caution', msg: t('reasons.rain6') });
+  }
+
+  if (river && !river.unavailable && river.valueM != null) {
+    sawData = true;
+    const v = river.valueM, hi = river.typicalHigh, lo = river.typicalLow;
+    if (hi != null) {
+      if (v > hi * THRESHOLDS.river.redAboveHighFactor)
+        factors.push({ level: 'nogo', msg: t('reasons.riverRed', { v: round1(v) }) });
+      else if (v > hi)
+        factors.push({ level: 'caution', msg: t('reasons.riverAmber', { v: round1(v) }) });
+      else if (lo != null && v < lo)
+        factors.push({ level: 'go', msg: t('reasons.riverLowNote', { v: round1(v) }) });
+    }
+    /* No typical range → neutral: value shown elsewhere, never coloured. */
+  }
+
+  if (sewageNear === true) {
+    sawData = true;
+    /* Advisory only — amber at most, never red, never "unsafe". */
+    factors.push({ level: 'caution', msg: t('reasons.sewage') });
+  }
+
+  let level = sawData ? 'go' : 'unknown';
+  for (const f of factors) level = worse(level, f.level);
+
+  const drivers = factors.filter((f) => f.level !== 'go');
+  drivers.sort((a, b) => LEVEL_ORDER[b.level] - LEVEL_ORDER[a.level]);
+  const reason = level === 'unknown' ? t('reasons.noData')
+    : drivers.length ? drivers.map((f) => f.msg).join(' · ')
+    : t('reasons.allClear');
+
+  return { level, reason, factors };
+}
+
+/* ============================== S6 MAP ================================== */
+let map, spotMarkers = {}, userMarker = null, sewageLayer = null, parkingLayer = null;
+const VERDICT_COLOR = { go: '#1F8A4C', caution: '#D9820F', nogo: '#C6362C', unknown: '#7A8C93' };
+
+function initMap() {
+  map = L.map('map', { zoomControl: false, attributionControl: true })
+    .setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
+  L.control.zoom({ position: 'bottomleft' }).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+
+  parkingLayer = L.layerGroup();
+
+  for (const spot of LAUNCH_POINTS) {
+    const m = L.marker([spot.lat, spot.lng], { icon: pinIcon('unknown', false), keyboard: true, title: spot.name })
+      .addTo(map)
+      .on('click', () => selectSpot(spot.id, true));
+    spotMarkers[spot.id] = m;
+  }
+  if (LAUNCH_POINTS.length) {
+    map.fitBounds(L.latLngBounds(LAUNCH_POINTS.map((s) => [s.lat, s.lng])).pad(0.25));
+  }
+}
+
+function pinIcon(level, selected) {
+  return L.divIcon({
+    className: '',
+    html: '<div class="pin' + (selected ? ' sel' : '') + '" style="background:' + VERDICT_COLOR[level] + '"></div>',
+    iconSize: [26, 26], iconAnchor: [13, 13]
+  });
+}
+
+function paintPin(spotId) {
+  const a = state.assessments[spotId];
+  const level = a && a.verdict ? a.verdict.level : 'unknown';
+  spotMarkers[spotId].setIcon(pinIcon(level, spotId === state.selectedId));
+}
+
+function showUser(lat, lng) {
+  if (userMarker) userMarker.setLatLng([lat, lng]);
+  else userMarker = L.marker([lat, lng], {
+    icon: L.divIcon({ className: '', html: '<div class="user-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }),
+    interactive: false
+  }).addTo(map);
+}
+
+function renderSewageLayer(fc) {
+  if (sewageLayer) map.removeLayer(sewageLayer);
+  sewageLayer = L.geoJSON(fc, {
+    style: { color: '#8A5A2B', weight: 4, opacity: 0.75 },
+    interactive: false
+  });
+  if (state.toggles.sewage) sewageLayer.addTo(map);
+}
+
+function renderParkingMarkers(spot, results) {
+  parkingLayer.clearLayers();
+  for (const p of results.parking) {
+    L.marker([p.lat, p.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="p-mark">P</div>', iconSize: [20, 20], iconAnchor: [10, 10] })
+    }).bindPopup(esc(p.name || t('parkingHeading')) + (p.fee === 'yes' ? ' · ' + t('paid') : p.fee === 'no' ? ' · ' + t('free') : ''))
+      .addTo(parkingLayer);
+  }
+  for (const s of results.slipways) {
+    L.marker([s.lat, s.lng], {
+      icon: L.divIcon({ className: '', html: '<div class="s-mark">S</div>', iconSize: [20, 20], iconAnchor: [10, 10] })
+    }).bindPopup(esc(s.name || t('slipway'))).addTo(parkingLayer);
+  }
+  if (!map.hasLayer(parkingLayer)) { parkingLayer.addTo(map); setToggle('parking', true); }
+}
+
+/* ============================== S7 UI =================================== */
+const state = {
+  selectedId: null,
+  userPos: null,
+  assessments: {},          // spotId → {wx, river, sewageNear, verdict, at, stale}
+  sewage: { status: 'idle', fc: null },
+  toggles: { sewage: false, parking: false },
+  parkingResults: {}        // spotId → results
+};
+
+function bannerTargetId() {
+  if (state.selectedId) return state.selectedId;
+  if (state.userPos) {
+    let best = null, bestKm = Infinity;
+    for (const s of LAUNCH_POINTS) {
+      const km = haversineKm(state.userPos.lat, state.userPos.lng, s.lat, s.lng);
+      if (km < bestKm) { bestKm = km; best = s.id; }
+    }
+    return best;
+  }
+  return LAUNCH_POINTS[0] && LAUNCH_POINTS[0].id;
+}
+
+function renderBanner() {
+  const id = bannerTargetId(); if (!id) return;
+  const spot = LAUNCH_POINTS.find((s) => s.id === id);
+  const a = state.assessments[id];
+  const v = a && a.verdict ? a.verdict : { level: 'unknown', reason: t('loading') };
+  const el = $('#verdict');
+  el.style.setProperty('--v', VERDICT_COLOR[v.level]);
+  const lab = $('#v-label');
+  lab.classList.remove('skel');
+  lab.textContent = t('verdictEmoji.' + v.level) + ' ' + t('verdict.' + v.level);
+  $('#v-spot').textContent = '· ' + spot.name;
+  $('#v-reason').textContent = v.reason;
+}
+
+function cellSet(sel, value, unit, tone) {
+  const cell = $(sel);
+  cell.classList.remove('warn', 'bad');
+  if (tone) cell.classList.add(tone);
+  const v = cell.querySelector('.v');
+  v.classList.remove('skel');
+  v.innerHTML = value;
+  cell.querySelector('.u').textContent = unit || '';
+}
+
+function renderConditions() {
+  const id = bannerTargetId(); if (!id) return;
+  const a = state.assessments[id];
+  const wx = a && a.wx, rv = a && a.river;
+
+  if (wx) {
+    const dir = wx.windDirDeg != null ? wx.windDirDeg : 0;
+    const arrow = '<span class="wind-arrow" style="transform:rotate(' + ((dir + 180) % 360) + 'deg)">↑</span>';
+    cellSet('#c-wind',
+      arrow + ' ' + Math.round(wx.windMph),
+      compassFrom(dir) + ' · ' + t('mph'),
+      wx.windMph > THRESHOLDS.windMph.redAt ? 'bad' : wx.windMph > THRESHOLDS.windMph.amberAt ? 'warn' : null);
+    cellSet('#c-gust', String(Math.round(wx.gustMph)), t('mph'),
+      wx.gustMph > THRESHOLDS.gustMph.redAt ? 'bad' : wx.gustMph > THRESHOLDS.gustMph.amberAt ? 'warn' : null);
+    const r6 = wx.rainNext6hMm != null ? wx.rainNext6hMm : '—';
+    cellSet('#c-rain', String(r6), t('mm') + (wx.tempC != null ? ' · ' + Math.round(wx.tempC) + '°C' : ''),
+      wx.rainNext6hMm >= THRESHOLDS.rain.next6hMm ? 'warn' : null);
+  } else {
+    cellSet('#c-wind', '—', '', null); cellSet('#c-gust', '—', '', null); cellSet('#c-rain', '—', '', null);
+  }
+
+  if (rv && !rv.unavailable && rv.valueM != null) {
+    let label = t('riverNoRange'), tone = null;
+    if (rv.typicalHigh != null) {
+      if (rv.valueM > rv.typicalHigh * THRESHOLDS.river.redAboveHighFactor) { label = t('riverVeryHigh'); tone = 'bad'; }
+      else if (rv.valueM > rv.typicalHigh) { label = t('riverHigh'); tone = 'warn'; }
+      else if (rv.typicalLow != null && rv.valueM < rv.typicalLow) { label = t('riverLow'); }
+      else label = t('riverNormal');
+    }
+    cellSet('#c-river', round1(rv.valueM) + '<span style="font-size:.7em"> m</span>', label, tone);
+  } else {
+    cellSet('#c-river', '—', rv && rv.unavailable ? t('riverUnavailable') : '', null);
+  }
+
+  /* footer: freshness + gauge name */
+  const bits = [];
+  if (a && a.at) bits.push(a.stale ? t('staleNote', { t: fmtTime(a.at) }) : t('updated', { t: fmtTime(a.at) }));
+  if (rv && rv.stationLabel) bits.push((rv.auto ? t('gaugeAuto') : t('gauge')) + ': ' + rv.stationLabel);
+  if (!navigator.onLine) bits.push(t('offline'));
+  $('#cond-foot').textContent = bits.join(' · ');
+}
+
+function selectSpot(id, openSheet) {
+  const prev = state.selectedId;
+  state.selectedId = id;
+  if (prev && spotMarkers[prev]) paintPin(prev);
+  paintPin(id);
+  renderBanner(); renderConditions();
+  if (openSheet) renderSheet(id);
+}
+
+function renderSheet(id) {
+  const spot = LAUNCH_POINTS.find((s) => s.id === id); if (!spot) return;
+  const a = state.assessments[id];
+
+  $('#d-name').textContent = spot.name;
+  const subBits = [spot.waterway];
+  if (state.userPos) subBits.push(t('distanceAway', { v: round1(haversineKm(state.userPos.lat, state.userPos.lng, spot.lat, spot.lng)) }));
+  $('#d-sub').textContent = subBits.join(' · ');
+
+  const badges = [t('launchType.' + spot.launchType) || spot.launchType,
+                  t('difficulty.' + spot.difficulty) || spot.difficulty];
+  $('#d-badges').innerHTML = badges.map((b) => '<span class="badge">' + esc(b) + '</span>').join('') +
+    (spot.placeholder ? '<span class="badge" style="border-color:#E7C979;background:#FBF3DC">' + esc(t('placeholderNote')) + '</span>' : '');
+
+  /* Verdict + contributing factors, always with plain-English reasons */
+  const v = a && a.verdict;
+  if (v) {
+    const rows = v.factors.length
+      ? v.factors.map((f) => '<div class="factor"><span class="dot" style="background:' + VERDICT_COLOR[f.level] + '"></span><span>' + esc(f.msg) + '</span></div>').join('')
+      : '<div class="factor"><span class="dot" style="background:' + VERDICT_COLOR.go + '"></span><span>' + esc(t('reasons.allClear')) + '</span></div>';
+    $('#d-verdict').innerHTML =
+      '<div class="kv"><b style="color:' + VERDICT_COLOR[v.level] + ';font-family:var(--display);font-size:1.05rem">' +
+      t('verdictEmoji.' + v.level) + ' ' + t('verdict.' + v.level) + '</b> — ' + esc(t('whyVerdict')) + ':</div>' + rows;
+  } else {
+    $('#d-verdict').innerHTML = '<div class="kv muted">' + esc(t('loading')) + '</div>';
+  }
+
+  /* River line */
+  const rv = a && a.river;
+  $('#d-river').innerHTML = (rv && !rv.unavailable && rv.valueM != null)
+    ? '<b>' + esc(t('cells.river')) + ':</b> ' + round1(rv.valueM) + ' m at ' + esc(rv.stationLabel) +
+      (rv.typicalHigh != null
+        ? ' (typical ' + round1(rv.typicalLow != null ? rv.typicalLow : 0) + '–' + round1(rv.typicalHigh) + ' m)'
+        : ' — ' + esc(t('riverNoRange')))
+    : '<span class="muted">' + esc(t('riverUnavailable')) + '</span>';
+
+  /* Static info from the curated data */
+  const p = spot.parking || {};
+  $('#d-parkinfo').innerHTML = '<b>' + esc(t('parkingHeading')) + ':</b> ' +
+    esc([p.name, p.postcode].filter(Boolean).join(', ') || '—') +
+    (p.type ? ' · ' + esc(t(p.type)) : '');
+  $('#d-route').innerHTML = spot.route ? '<b>' + esc(t('route')) + ':</b> ' + esc(spot.route) : '';
+  $('#d-hazards').innerHTML = spot.hazards ? '<div class="hazard">⚠️ <b>' + esc(t('hazards')) + ':</b> ' + esc(spot.hazards) + '</div>' : '';
+  $('#d-notes').textContent = spot.notes || '';
+
+  /* Action buttons */
+  const acts = [];
+  if (spot.w3w) {
+    acts.push('<a class="act" target="_blank" rel="noopener" href="https://what3words.com/' + encodeURIComponent(spot.w3w) + '">/// ' + esc(t('actions.w3w')) + '</a>');
+  }
+  acts.push('<a class="act primary" target="_blank" rel="noopener" href="https://maps.google.com/?q=' + spot.lat + ',' + spot.lng + '">🧭 ' + esc(t('actions.directions')) + '</a>');
+  acts.push('<button class="act" id="act-carparks">🅿️ ' + esc(t('actions.carparks')) + '</button>');
+  acts.push('<a class="act" target="_blank" rel="noopener" href="' + CONFIG.PARK4NIGHT_URL + '">🌙 ' + esc(t('actions.overnight')) + '</a>');
+  acts.push('<button class="act" id="act-share">↗️ ' + esc(t('actions.share')) + '</button>');
+  $('#d-actions').innerHTML = acts.join('');
+
+  $('#act-carparks').addEventListener('click', () => loadParkingFor(spot));
+  $('#act-share').addEventListener('click', () => shareSpot(spot));
+
+  /* Previously fetched parking for this spot */
+  renderParkingList(id);
+
+  document.body.classList.add('sheet-open');
+}
+
+function closeSheet() { document.body.classList.remove('sheet-open'); }
+
+async function loadParkingFor(spot) {
+  const box = $('#d-parking-results');
+  box.innerHTML = '<p class="muted">' + esc(t('parkingLoading')) + '</p>';
+  const res = await getParking(spot);
+  if (!res) { box.innerHTML = '<p class="muted">' + esc(t('parkingError')) + '</p>'; return; }
+  state.parkingResults[spot.id] = res.value;
+  renderParkingList(spot.id);
+  renderParkingMarkers(spot, res.value);
+}
+
+function renderParkingList(spotId) {
+  const box = $('#d-parking-results');
+  const res = state.parkingResults[spotId];
+  if (!res) { box.innerHTML = ''; return; }
+  if (!res.parking.length) { box.innerHTML = '<p class="muted">' + esc(t('parkingNone')) + '</p>'; return; }
+  let html = '<ul class="parking-list">' + res.parking.map((p) =>
+    '<li><b>' + esc(p.name || t('parkingHeading')) + '</b> · ' + p.km + ' km' +
+    (p.fee === 'yes' ? ' · ' + esc(t('paid')) : p.fee === 'no' ? ' · ' + esc(t('free')) : '') +
+    (p.access && p.access !== 'yes' ? ' · ' + esc(p.access) : '') + '</li>').join('') + '</ul>';
+  if (res.slipways.length) html += '<p class="muted">' + esc(t('slipwaysFound', { v: res.slipways.length })) + '</p>';
+  box.innerHTML = html;
+}
+
+async function shareSpot(spot) {
+  const url = 'https://maps.google.com/?q=' + spot.lat + ',' + spot.lng;
+  let text = spot.name + ' — ' + spot.waterway;
+  /* Stored W3W wins; else, if a key is configured, convert live (§5.5).
+     No key → the Google Maps pin alone is the fallback. */
+  const words = spot.w3w || await w3wForCoords(spot.lat, spot.lng);
+  if (words) text += ' · ///' + words;
+  try {
+    if (navigator.share) await navigator.share({ title: 'PaddleReady', text, url });
+    else { await navigator.clipboard.writeText(text + ' ' + url); toast(t('copied')); }
+  } catch (e) {
+    try { await navigator.clipboard.writeText(text + ' ' + url); toast(t('shareFail')); } catch (_) {}
+  }
+}
+
+/* ---- Info modal ---- */
+function renderInfoModal() {
+  $('#m-title').textContent = t('infoTitle');
+  const i = STRINGS[LANG].info;
+  $('#m-body').innerHTML =
+    '<p>' + esc(i.p1) + '</p>' +
+    '<p>' + esc(i.p2) + '</p>' +
+    '<h3>' + esc(i.howTitle) + '</h3><p>' + esc(i.how) + '</p>' +
+    '<h3>' + esc(i.attribution) + '</h3>' +
+    '<ul><li>' + esc(i.a1) + '</li><li>' + esc(i.a2) + '</li><li>' + esc(i.a3) + '</li></ul>' +
+    '<p class="muted">' + esc(t('sewageLegend')) + '</p>';
+  $('#m-ver').textContent = 'PaddleReady ' + CONFIG.APP_VERSION;
+}
+
+/* ---- Toggles ---- */
+function setToggle(name, on) {
+  state.toggles[name] = on;
+  $('#tg-' + name).setAttribute('aria-pressed', String(on));
+}
+function onToggleSewage() {
+  const on = !state.toggles.sewage;
+  setToggle('sewage', on);
+  if (!on) { if (sewageLayer) map.removeLayer(sewageLayer); return; }
+  if (state.sewage.status === 'unconfigured') { toast(t('sewageUnconfigured')); setToggle('sewage', false); return; }
+  if (state.sewage.status === 'error') { toast(t('sewageUnavailable')); setToggle('sewage', false); return; }
+  if (state.sewage.fc) { renderSewageLayer(state.sewage.fc); toast(t('sewageLegend')); }
+}
+function onToggleParking() {
+  const on = !state.toggles.parking;
+  setToggle('parking', on);
+  if (on) parkingLayer.addTo(map); else map.removeLayer(parkingLayer);
+}
+
+/* ---- Geolocation (foreground only, on demand) ---- */
+function locateMe() {
+  if (!('geolocation' in navigator)) { toast(t('locateDenied')); return; }
+  toast(t('locating'));
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      state.userPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      showUser(state.userPos.lat, state.userPos.lng);
+      map.setView([state.userPos.lat, state.userPos.lng], Math.max(map.getZoom(), 11));
+      if (!state.selectedId) { renderBanner(); renderConditions(); }
+      const id = bannerTargetId(); if (id) paintPin(id);
+    },
+    () => toast(t('locateDenied')),
+    { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 }
+  );
+}
+
+/* ========================= S8 EVENTS + BOOT ============================= */
+async function assessAll() {
+  /* Sewage is one shared national file; fetch it once (if configured). */
+  const sewagePromise = getSewage().then((s) => {
+    state.sewage = { status: s.status, fc: s.fc || null };
+    if (s.status === 'ok' && state.toggles.sewage) renderSewageLayer(s.fc);
+  });
+
+  /* Per spot: weather + river in parallel; paint progressively. */
+  await Promise.allSettled(LAUNCH_POINTS.map(async (spot) => {
+    const [wxRes, rvRes] = await Promise.allSettled([getWeather(spot), getRiver(spot)]);
+    const wx = wxRes.status === 'fulfilled' && wxRes.value ? wxRes.value.value : null;
+    const rv = rvRes.status === 'fulfilled' && rvRes.value ? rvRes.value.value : null;
+    const at = Math.max(
+      wxRes.status === 'fulfilled' && wxRes.value ? wxRes.value.at : 0,
+      rvRes.status === 'fulfilled' && rvRes.value ? rvRes.value.at : 0) || null;
+    const stale = (wxRes.status === 'fulfilled' && wxRes.value && wxRes.value.stale) ||
+                  (rvRes.status === 'fulfilled' && rvRes.value && rvRes.value.stale) || false;
+
+    await sewagePromise;
+    const near = state.sewage.status === 'ok' ? sewageNearSpot(state.sewage.fc, spot) : null;
+
+    state.assessments[spot.id] = {
+      wx, river: rv, sewageNear: near, at, stale,
+      verdict: assessSpot(wx, rv, near)
+    };
+    paintPin(spot.id);
+    if (spot.id === bannerTargetId()) { renderBanner(); renderConditions(); }
+    if (document.body.classList.contains('sheet-open') && spot.id === state.selectedId) renderSheet(spot.id);
+  }));
+  renderBanner(); renderConditions();
+}
+
+function applyStaticStrings() {
+  $('#s-tagline').textContent = t('tagline');
+  $('#s-advisory').textContent = t('advisory');
+  $('#s-tg-sewage').textContent = t('toggles.sewage');
+  $('#s-tg-parking').textContent = t('toggles.parking');
+  $('#s-wind').textContent = t('cells.wind');
+  $('#s-gust').textContent = t('cells.gust');
+  $('#s-rain').textContent = t('cells.rain');
+  $('#s-river').textContent = t('cells.river');
+  $('#v-reason').textContent = t('loading');
+}
+
+function boot() {
+  applyStaticStrings();
+  renderInfoModal();
+  initMap();
+  setupPWA();
+
+  $('#btn-info').addEventListener('click', () => $('#modal').classList.add('open'));
+  $('#btn-modal-close').addEventListener('click', () => $('#modal').classList.remove('open'));
+  $('#modal').addEventListener('click', (e) => { if (e.target === $('#modal')) $('#modal').classList.remove('open'); });
+  $('#btn-sheet-close').addEventListener('click', closeSheet);
+  $('#sheet-backdrop').addEventListener('click', closeSheet);
+  $('#tg-sewage').addEventListener('click', onToggleSewage);
+  $('#tg-parking').addEventListener('click', onToggleParking);
+  $('#btn-locate').addEventListener('click', locateMe);
+  window.addEventListener('online', renderConditions);
+  window.addEventListener('offline', renderConditions);
+
+  assessAll();
+}
+
+/* ======================== S9 PWA (single-file) ========================== */
+function setupPWA() {
+  /* Manifest as a runtime Blob URL keeps everything in one file. */
+  const icon = 'data:image/svg+xml,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+    '<rect width="100" height="100" rx="22" fill="#14646E"/>' +
+    '<path d="M30 72 Q50 60 70 72" stroke="#F2F6F5" stroke-width="6" fill="none" stroke-linecap="round"/>' +
+    '<line x1="62" y1="20" x2="44" y2="66" stroke="#F2F6F5" stroke-width="6" stroke-linecap="round"/>' +
+    '<ellipse cx="64.5" cy="16" rx="7" ry="10" fill="#F2F6F5" transform="rotate(21 64.5 16)"/>' +
+    '</svg>');
+  const manifest = {
+    name: 'PaddleReady', short_name: 'PaddleReady',
+    description: 'Go / No-Go pre-trip dashboard for UK SUP.',
+    start_url: '.', scope: '.', display: 'standalone',
+    background_color: '#F2F6F5', theme_color: '#14646E',
+    icons: [{ src: icon, sizes: 'any', type: 'image/svg+xml', purpose: 'any' }]
+  };
+  try {
+    $('#manifest-link').href = URL.createObjectURL(
+      new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
+    $('#apple-icon').href = icon;
+  } catch (e) { dbg('manifest blob failed', e); }
+
+  /* Offline data already works via localStorage. Caching the app SHELL
+     needs a real sibling sw.js file (browsers refuse Blob/data service
+     workers) — that is the one thing a single HTML file cannot do. If
+     you add the sw.js from the commented block at the bottom of this
+     file, it is picked up automatically here; if not, nothing breaks. */
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    fetch('sw.js', { method: 'HEAD' })
+      .then((r) => { if (r.ok) navigator.serviceWorker.register('sw.js'); })
+      .catch(() => { /* no sw.js present — fine */ });
+  }
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+else boot();
+</script>
+
+<!--
+=============================================================================
+OPTIONAL: sw.js — copy everything between the CUT lines into a file named
+sw.js next to index.html to make the app shell open fully offline.
+(Installability does not require it; offline *data* already works.)
+──────────────────────────── CUT BELOW ─────────────────────────────────────
+const SHELL = 'paddleready-shell-v1';
+const ASSETS = [
+  './',
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+  'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700;800&display=swap'
+];
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
-
-modal.classList.remove('hidden');
-modal.classList.add('flex');
-}
-
-function createStatRow(label, value, color, icon) {
-return &lt;div class="flex items-center gap-x-3"&gt; &lt;i class="fa-solid${icon} w-5 text-center" style="color: {label}</span>
-<span class="font-mono">{value}%; background: ${color}"></div>
-</div>
-</div>
-</div>
-`;
-}
-
-function performAction(charId, changes, actionName) {
-const charIndex = c
+self.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys().then((keys) =>
+    Promise.all(keys.filter((k) => k !== SHELL).map((k) => caches.delete(k)))
+  ).then(() => self.clients.claim()));
+});
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  // Never intercept live data APIs — the page handles its own caching.
+  if (/open-meteo|environment\.data|overpass|what3words|tile\.openstreetmap/.test(url.host)) return;
+  if (e.request.mode === 'navigate') {
+    e.respondWith(fetch(e.request).catch(() => caches.match('./')));
+    return;
+  }
+  e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
+});
+──────────────────────────── CUT ABOVE ─────────────────────────────────────
+-->
+</body>
+</html>
