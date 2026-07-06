@@ -1,4 +1,4 @@
-<!-- build: v0.1.1 2026-07-06 -->
+<!-- build: v0.3.0 2026-07-06 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -117,6 +117,21 @@ header.app{
   width:48px;height:48px;border-radius:50%;border:1px solid var(--line);
   background:rgba(255,255,255,.96);box-shadow:var(--shadow);font-size:1.2rem;
 }
+/* Fixed centre crosshair — the map pans beneath it */
+.crosshair{position:absolute;top:50%;left:50%;width:44px;height:44px;transform:translate(-50%,-50%);z-index:790;pointer-events:none}
+.crosshair .ch-h,.crosshair .ch-v{position:absolute;background:var(--water-deep);opacity:.85;box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+.crosshair .ch-h{top:50%;left:0;width:100%;height:2px;transform:translateY(-1px)}
+.crosshair .ch-v{left:50%;top:0;height:100%;width:2px;transform:translateX(-1px)}
+.crosshair .ch-dot{position:absolute;top:50%;left:50%;width:10px;height:10px;border-radius:50%;background:var(--water);border:2px solid #fff;transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,.4)}
+/* "Check here" confirm button — appears after the map settles */
+.check-here{
+  position:absolute;top:calc(50% + 30px);left:50%;transform:translate(-50%,6px);z-index:795;
+  min-height:40px;padding:0 16px;border-radius:999px;border:none;
+  background:var(--water-deep);color:#fff;font-size:.85rem;font-weight:700;
+  box-shadow:0 3px 10px rgba(0,0,0,.28);white-space:nowrap;
+  opacity:0;pointer-events:none;transition:opacity .18s ease, transform .18s ease;
+}
+.check-here.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
 /* Leaflet pin: verdict-coloured dot */
 .pin{width:26px;height:26px;border-radius:50%;border:3px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.35)}
 .pin.sel{transform:scale(1.35)}
@@ -124,6 +139,31 @@ header.app{
 .p-mark{width:20px;height:20px;border-radius:5px;background:#3A6EA5;color:#fff;font:700 12px/20px var(--body);text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)}
 .s-mark{width:20px;height:20px;border-radius:50%;background:#0C4A52;color:#fff;font:700 11px/18px var(--body);text-align:center;border:2px solid #fff}
 .leaflet-container{font-family:var(--body)}
+
+/* ---------- Timeline (quick chips + hour slider) ---------- */
+.timeline{margin:0 12px 10px;background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:10px 12px}
+.tl-quick{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;scrollbar-width:none}
+.tl-quick::-webkit-scrollbar{display:none}
+.tl-chip{
+  flex:0 0 auto;min-height:36px;padding:0 12px;border-radius:999px;
+  border:1px solid var(--line);background:var(--paper);color:var(--ink);
+  font-size:.8rem;font-weight:600;white-space:nowrap;
+}
+.tl-chip[aria-pressed="true"]{background:var(--water);border-color:var(--water);color:#fff}
+.tl-slider{display:flex;align-items:center;gap:10px;margin-top:9px}
+.tl-readout{
+  font-family:var(--display);font-weight:700;font-size:.86rem;color:var(--water-deep);
+  min-width:100px;text-align:right;font-variant-numeric:tabular-nums;
+}
+#tl-range{
+  -webkit-appearance:none;appearance:none;height:6px;border-radius:3px;flex:1;margin:8px 0;
+  background:linear-gradient(90deg,var(--water) 0%,var(--water) var(--fill,0%),var(--line) var(--fill,0%),var(--line) 100%);
+}
+#tl-range::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;width:26px;height:26px;border-radius:50%;
+  background:var(--water);border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.3);cursor:pointer;
+}
+#tl-range::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--water);border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.3);cursor:pointer}
 
 /* ---------- Conditions strip ---------- */
 .conditions{margin:10px 12px 14px}
@@ -143,11 +183,11 @@ header.app{
 
 /* ---------- Detail bottom sheet ---------- */
 .sheet-backdrop{
-  position:fixed;inset:0;background:rgba(14,42,50,.35);z-index:900;
+  position:fixed;inset:0;background:rgba(14,42,50,.35);z-index:1100;
   opacity:0;pointer-events:none;transition:opacity .25s ease;
 }
 .sheet{
-  position:fixed;left:0;right:0;bottom:0;z-index:901;
+  position:fixed;left:0;right:0;bottom:0;z-index:1101;
   background:var(--card);border-radius:20px 20px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.2);
   max-height:82vh;overflow-y:auto;overscroll-behavior:contain;
   transform:translateY(105%);transition:transform .3s ease;
@@ -179,7 +219,7 @@ body.sheet-open .sheet-backdrop{opacity:1;pointer-events:auto}
 
 /* ---------- Info modal ---------- */
 .modal{
-  position:fixed;inset:0;z-index:950;display:none;align-items:flex-end;justify-content:center;
+  position:fixed;inset:0;z-index:1200;display:none;align-items:flex-end;justify-content:center;
   background:rgba(14,42,50,.4);
 }
 .modal.open{display:flex}
@@ -196,7 +236,7 @@ body.sheet-open .sheet-backdrop{opacity:1;pointer-events:auto}
 .toast{
   position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
   background:var(--ink);color:#fff;font-size:.82rem;padding:10px 16px;border-radius:999px;
-  z-index:990;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .3s;
+  z-index:1300;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .3s;
   max-width:88vw;text-align:center;
 }
 .toast.show{opacity:1}
@@ -226,9 +266,23 @@ body.sheet-open .sheet-backdrop{opacity:1;pointer-events:auto}
   </div>
 </section>
 
+<!-- Timeline: quick-jump chips + Windy-style hour slider -->
+<section class="timeline" id="timeline" aria-label="Choose a time">
+  <div class="tl-quick" id="tl-quick"></div>
+  <div class="tl-slider">
+    <input type="range" id="tl-range" min="0" max="144" step="1" value="0" aria-label="Hours from now">
+    <div class="tl-readout" id="tl-readout"></div>
+  </div>
+</section>
+
 <!-- Map -->
 <div class="map-wrap">
   <div id="map" role="application" aria-label="Map of launch points"></div>
+  <!-- Fixed centre crosshair: the map pans under it, Windy-style -->
+  <div class="crosshair" id="crosshair" aria-hidden="true">
+    <span class="ch-h"></span><span class="ch-v"></span><span class="ch-dot"></span>
+  </div>
+  <button class="check-here" id="check-here">📍 <span id="s-check-here"></span></button>
   <div class="map-controls">
     <button class="toggle" id="tg-sewage" aria-pressed="false">🟤 <span id="s-tg-sewage"></span></button>
     <button class="toggle" id="tg-parking" aria-pressed="false">🅿️ <span id="s-tg-parking"></span></button>
@@ -293,17 +347,20 @@ body.sheet-open .sheet-backdrop{opacity:1;pointer-events:auto}
 
 /* ============================== S0 CONFIG =============================== */
 const CONFIG = {
-  APP_VERSION: 'v0.1.1 (2026-07-06)',
+  APP_VERSION: 'v0.3.0 (2026-07-06)',
 
   /* Feature flags — flip any layer off without touching its code. */
   FEATURES: { weather: true, river: true, sewage: true, parking: true },
 
-  /* Open-Meteo — free, no key, CORS-enabled. */
+  /* Open-Meteo — free, no key, CORS-enabled. We pull the full hourly
+     series (yesterday → +7 days) once and index into it for whichever
+     time the user has scrubbed to. `current` still drives the initial
+     "now" view before the series is parsed. */
   WEATHER_URL: (lat, lng) =>
     'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lng +
     '&current=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code' +
-    '&hourly=precipitation,wind_speed_10m,wind_gusts_10m' +
-    '&wind_speed_unit=mph&timezone=Europe%2FLondon&past_days=1&forecast_days=2',
+    '&hourly=temperature_2m,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,weather_code' +
+    '&wind_speed_unit=mph&timezone=Europe%2FLondon&past_days=1&forecast_days=7',
 
   /* Environment Agency real-time flood-monitoring API — England only,
      free, open, no key. Designed for browser use (CORS enabled). */
@@ -325,8 +382,13 @@ const CONFIG = {
   SEWAGE_GEOJSON_URL: '',   // TODO: user to add URL (see note above)
 
   /* Overpass API (OpenStreetMap) — community-run, CORS-enabled, rate-
-     limited. Only queried on demand + cached 24 h per spot. */
-  OVERPASS_URL: 'https://overpass-api.de/api/interpreter',
+     limited. Only queried on demand + cached 24 h per spot. The main
+     instance is often busy, so we fall through a list of public
+     mirrors until one answers. */
+  OVERPASS_URLS: [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter'
+  ],
   PARKING_RADIUS_M: 1000,
   SLIPWAY_RADIUS_M: 800,
 
@@ -334,11 +396,11 @@ const CONFIG = {
      conversion needs a key. Leave blank to fall back to a maps pin. */
   W3W_API_KEY: '',          // TODO (optional): user to add key
 
-  /* park4night hand-off. A coordinate deep-link format could not be
-     confirmed from official docs, so per spec we open the homepage.
-     Candidate to test by hand and swap in if it works:
-     'https://park4night.com/en/search?lat={lat}&lng={lng}'            */
-  PARK4NIGHT_URL: 'https://park4night.com',
+  /* park4night hand-off only (their crowdsourced database stays theirs).
+     Coordinate deep-link format verified live 2026-07-06:
+     /en/search?lat=..&lng=..&z=..  → opens their map centred on the spot. */
+  PARK4NIGHT_URL: (lat, lng) =>
+    'https://park4night.com/en/search?lat=' + lat + '&lng=' + lng + '&z=13',
 
   /* Cache freshness windows (minutes). */
   FRESH_MIN: { weather: 15, river: 15, sewage: 20, parking: 60 * 24 },
@@ -369,6 +431,14 @@ const STRINGS = {
   en: {
     tagline: 'Go or no-go, before you leave home',
     advisory: 'Advisory only — conditions change fast. Your call on the water.',
+    time: { now: 'Now', today: 'Today', tomorrow: 'Tomorrow' },
+    quick: { now: 'Now', tonight: 'Tonight', tomAm: 'Tomorrow AM', tomPm: 'Tomorrow PM' },
+    forecastNote: 'Forecast — wind & rain only.',
+    riverLiveOnly: 'live now (no forecast)',
+    adhocName: 'Chosen point',
+    adhocWaterway: 'Map location',
+    adhocNote: 'Map point — nearest gauge used',
+    checkHere: 'Check here',
     loading: 'Checking conditions…',
     verdict: { go: 'GO', caution: 'CAUTION', nogo: 'NO-GO', unknown: 'NO DATA' },
     verdictEmoji: { go: '🟢', caution: '🟡', nogo: '🔴', unknown: '⚪️' },
@@ -431,7 +501,7 @@ const STRINGS = {
       a2: 'Storm-overflow downstream-impact data: sewagemap.co.uk (CC-BY-SA).',
       a3: 'Weather: Open-Meteo.com. Map data © OpenStreetMap contributors. Parking/slipways via Overpass API.',
       howTitle: 'How the Go / No-Go verdict works',
-      how: 'Each spot is scored on wind gusts, steady wind, recent + forecast rain, river level against the gauge\'s typical range, and nearby storm-overflow activity. The overall verdict is simply the worst contributing factor, and the reasons are always shown. Thresholds are flat-water SUP defaults and can be tuned in the app\'s CONFIG.'
+      how: 'Each spot is scored on wind gusts, steady wind, recent + forecast rain, river level against the gauge\'s typical range, and nearby storm-overflow activity. The overall verdict is the worst contributing factor, and the reasons are always shown. Use the timeline to check any hour up to 6 days ahead — wind and rain are forecast, but river level and storm-overflow status are live-only (no forecast exists), so those stay at their current reading and are labelled as such. Drag the map so the centre crosshair sits over any spot, then tap "Check here" to see its conditions — it uses the nearest river gauge. Thresholds are flat-water SUP defaults, tunable in CONFIG.'
     }
   }
 };
@@ -601,36 +671,45 @@ async function fetchJSON(url, opts = {}) {
 }
 
 /* ---- 4a. Weather (Open-Meteo) ---- */
+/* Fetch once, keep the whole hourly series. weatherAt() (below) reads the
+   conditions for whichever hour is selected. Storing raw arrays keeps the
+   cache small and lets the time slider work with zero extra requests. */
 async function getWeather(spot) {
   if (!CONFIG.FEATURES.weather) return null;
   return cachedFetch('wx:' + spot.id, CONFIG.FRESH_MIN.weather, async () => {
     const data = await fetchJSON(CONFIG.WEATHER_URL(spot.lat, spot.lng));
-    const cur = data.current || {};
-    /* Derive trailing-24 h and next-6 h precipitation from the hourly
-       series (past_days=1 gives us yesterday). */
-    let rain24 = null, rain6 = null;
-    const H = data.hourly;
-    if (H && H.time && H.precipitation) {
-      const now = Date.now();
-      let idx = -1;
-      for (let i = 0; i < H.time.length; i++) {
-        if (new Date(H.time[i]).getTime() <= now) idx = i; else break;
-      }
-      if (idx >= 0) {
-        rain24 = 0;
-        for (let i = Math.max(0, idx - 23); i <= idx; i++) rain24 += H.precipitation[i] || 0;
-        rain6 = 0;
-        for (let i = idx + 1; i <= Math.min(H.time.length - 1, idx + 6); i++) rain6 += H.precipitation[i] || 0;
-        rain24 = round1(rain24); rain6 = round1(rain6);
-      }
-    }
+    const H = data.hourly || {};
     return {
-      tempC: cur.temperature_2m, rainNowMm: cur.precipitation,
-      windMph: cur.wind_speed_10m, gustMph: cur.wind_gusts_10m,
-      windDirDeg: cur.wind_direction_10m,
-      rain24hMm: rain24, rainNext6hMm: rain6
+      times: H.time || [],                 // ISO strings, local (Europe/London)
+      temp: H.temperature_2m || [],
+      precip: H.precipitation || [],
+      wind: H.wind_speed_10m || [],
+      gust: H.wind_gusts_10m || [],
+      dir: H.wind_direction_10m || []
     };
   });
+}
+
+/* Index into the hourly series for a given wall-clock time (ms epoch) and
+   return the paddling-relevant snapshot, including trailing-24 h rain (for
+   river-rise risk) and next-6 h rain from THAT moment. Returns null if the
+   requested time is outside the series. */
+function weatherAt(series, whenMs) {
+  if (!series || !series.times || !series.times.length) return null;
+  let idx = -1;
+  for (let i = 0; i < series.times.length; i++) {
+    if (new Date(series.times[i]).getTime() <= whenMs) idx = i; else break;
+  }
+  if (idx < 0) idx = 0;                     // clamp to first hour
+  let rain24 = 0, rain6 = 0;
+  for (let i = Math.max(0, idx - 23); i <= idx; i++) rain24 += series.precip[i] || 0;
+  for (let i = idx + 1; i <= Math.min(series.times.length - 1, idx + 6); i++) rain6 += series.precip[i] || 0;
+  return {
+    windMph: series.wind[idx], gustMph: series.gust[idx],
+    windDirDeg: series.dir[idx], tempC: series.temp[idx],
+    rainNowMm: series.precip[idx],
+    rain24hMm: round1(rain24), rainNext6hMm: round1(rain6)
+  };
 }
 
 /* ---- 4b. River level (Environment Agency, England only) ---- */
@@ -740,12 +819,20 @@ async function getParking(spot) {
       'node["leisure"="slipway"](around:' + CONFIG.SLIPWAY_RADIUS_M + ',' + spot.lat + ',' + spot.lng + ');' +
       'way["leisure"="slipway"](around:' + CONFIG.SLIPWAY_RADIUS_M + ',' + spot.lat + ',' + spot.lng + ');' +
       ');out center;';
-    const data = await fetchJSON(CONFIG.OVERPASS_URL, {
-      method: 'POST',
-      body: 'data=' + encodeURIComponent(q),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      timeout: CONFIG.OVERPASS_TIMEOUT_MS
-    });
+    /* Try each mirror until one answers; last failure propagates. */
+    let data = null, lastErr = null;
+    for (const url of CONFIG.OVERPASS_URLS) {
+      try {
+        data = await fetchJSON(url, {
+          method: 'POST',
+          body: 'data=' + encodeURIComponent(q),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: CONFIG.OVERPASS_TIMEOUT_MS
+        });
+        break;
+      } catch (e) { lastErr = e; dbg('overpass mirror failed', url, e.message); }
+    }
+    if (!data) throw lastErr || new Error('overpass unavailable');
     const parking = [], slipways = [];
     for (const el of (data.elements || [])) {
       const lat = el.lat != null ? el.lat : (el.center && el.center.lat);
@@ -861,7 +948,61 @@ function initMap() {
   if (LAUNCH_POINTS.length) {
     map.fitBounds(L.latLngBounds(LAUNCH_POINTS.map((s) => [s.lat, s.lng])).pad(0.25));
   }
+
+  /* Windy-style targeting: a crosshair is fixed to the centre of the map
+     (in the HTML overlay). Whenever the map stops moving, a "Check here"
+     button appears for the point now under the crosshair. Tapping it
+     queries that point — so panning around never spams the APIs. */
+  map.on('movestart', hideCheckHere);
+  map.on('moveend', showCheckHere);
+  /* Ignore the programmatic fitBounds/setView moves; only user drags count. */
+  map.on('dragstart zoomstart', () => { mapUserMoved = true; });
 }
+
+let mapUserMoved = false;
+let checkHereTimer = null;
+function hideCheckHere() { $('#check-here').classList.remove('show'); }
+function showCheckHere() {
+  if (!mapUserMoved) return;                 // skip initial framing
+  /* Don't offer it if the centre is basically on the last-checked point. */
+  const c = map.getCenter();
+  const a = state.adhoc.adhoc;
+  if (a && haversineKm(a.lat, a.lng, c.lat, c.lng) < 0.15) { hideCheckHere(); return; }
+  clearTimeout(checkHereTimer);
+  checkHereTimer = setTimeout(() => $('#check-here').classList.add('show'), 180);
+}
+
+/* Query the point currently under the crosshair (map centre). */
+async function checkCentre() {
+  const c = map.getCenter();
+  hideCheckHere();
+  await addAdhocPoint(c.lat, c.lng);
+}
+
+/* One reusable ad-hoc point: each check moves it and re-queries. */
+async function addAdhocPoint(lat, lng) {
+  lat = round4(lat); lng = round4(lng);
+  const id = 'adhoc';                        // single reusable id
+  const existing = state.adhoc[id];
+  const point = {
+    id, lat, lng, adhoc: true,
+    name: t('adhocName'), waterway: '',
+    marker: existing ? existing.marker : null
+  };
+  if (point.marker) point.marker.setLatLng([lat, lng]);
+  else {
+    point.marker = L.marker([lat, lng], { icon: pinIcon('unknown', true), title: t('adhocName') })
+      .addTo(map).on('click', () => selectSpot(id, true));
+  }
+  state.adhoc[id] = point;
+  delete state.assessments[id];              // clear stale data from a prior check
+  state.parkingResults[id] = undefined;
+  selectSpot(id, true);                       // open sheet immediately (loading state)
+  await assessSpotData(point, Promise.resolve());
+  if (state.selectedId === id) { renderBanner(); renderConditions(); renderSheet(id); }
+}
+
+const round4 = (n) => Math.round(n * 1e4) / 1e4;
 
 function pinIcon(level, selected) {
   return L.divIcon({
@@ -873,8 +1014,9 @@ function pinIcon(level, selected) {
 
 function paintPin(spotId) {
   const a = state.assessments[spotId];
-  const level = a && a.verdict ? a.verdict.level : 'unknown';
-  spotMarkers[spotId].setIcon(pinIcon(level, spotId === state.selectedId));
+  const level = a ? verdictForActive(a).level : 'unknown';
+  const marker = spotMarkers[spotId] || (state.adhoc[spotId] && state.adhoc[spotId].marker);
+  if (marker) marker.setIcon(pinIcon(level, spotId === state.selectedId));
 }
 
 function showUser(lat, lng) {
@@ -914,11 +1056,56 @@ function renderParkingMarkers(spot, results) {
 const state = {
   selectedId: null,
   userPos: null,
-  assessments: {},          // spotId → {wx, river, sewageNear, verdict, at, stale}
+  selectedTime: null,       // ms epoch of the hour being viewed; null = now
+  assessments: {},          // spotId → {wxSeries, river, sewageNear, at, stale}
   sewage: { status: 'idle', fc: null },
   toggles: { sewage: false, parking: false },
-  parkingResults: {}        // spotId → results
+  parkingResults: {},       // spotId → results
+  adhoc: {}                 // ad-hoc map-tap points: id → {id,lat,lng,...,marker}
 };
+
+/* Round a Date to the top of its hour. */
+function floorHour(ms) { const d = new Date(ms); d.setMinutes(0, 0, 0); return d.getTime(); }
+
+/* The hour currently in focus (defaults to the live hour). */
+function activeTime() { return state.selectedTime != null ? state.selectedTime : floorHour(Date.now()); }
+
+/* Resolve the weather snapshot for the active hour from a stored series. */
+function wxForActive(a) {
+  if (!a || !a.wxSeries) return null;
+  return weatherAt(a.wxSeries, activeTime());
+}
+
+/* Build the verdict for the active hour on demand (weather is time-indexed;
+   river + sewage are live-only and reused across the timeline). */
+function verdictForActive(a) {
+  if (!a) return { level: 'unknown', reason: t('loading'), factors: [] };
+  return assessSpot(wxForActive(a), a.river, a.sewageNear);
+}
+
+/* ---- Time slider: 0 = live hour, +1 per hour, up to +6 days ---- */
+const TIME_SPAN_HOURS = 6 * 24;   // 6 days ahead of the live hour
+
+function hourOffsetToMs(off) { return floorHour(Date.now()) + off * 3600 * 1000; }
+
+/* Friendly label for a time (e.g. "Now", "Today 18:00", "Sun 09:00"). */
+function timeLabel(ms) {
+  const d = new Date(ms), now = new Date();
+  const hh = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+  if (state.selectedTime == null) return t('time.now');
+  let day;
+  if (sameDay(d, now)) day = t('time.today');
+  else if (sameDay(d, tomorrow)) day = t('time.tomorrow');
+  else day = d.toLocaleDateString('en-GB', { weekday: 'short' });
+  return day + ' ' + hh;
+}
+
+/* Resolve a spot by id from either the curated list or ad-hoc map taps. */
+function spotById(id) {
+  return LAUNCH_POINTS.find((s) => s.id === id) || state.adhoc[id] || null;
+}
 
 function bannerTargetId() {
   if (state.selectedId) return state.selectedId;
@@ -935,15 +1122,18 @@ function bannerTargetId() {
 
 function renderBanner() {
   const id = bannerTargetId(); if (!id) return;
-  const spot = LAUNCH_POINTS.find((s) => s.id === id);
+  const spot = spotById(id); if (!spot) return;
   const a = state.assessments[id];
-  const v = a && a.verdict ? a.verdict : { level: 'unknown', reason: t('loading') };
+  const v = a ? verdictForActive(a) : { level: 'unknown', reason: t('loading') };
   const el = $('#verdict');
   el.style.setProperty('--v', VERDICT_COLOR[v.level]);
   const lab = $('#v-label');
   lab.classList.remove('skel');
   lab.textContent = t('verdictEmoji.' + v.level) + ' ' + t('verdict.' + v.level);
-  $('#v-spot').textContent = '· ' + spot.name;
+  /* Spot name + the time being viewed, so a forecast verdict is never
+     mistaken for "right now". */
+  const when = state.selectedTime != null ? ' · ' + timeLabel(activeTime()) : '';
+  $('#v-spot').textContent = '· ' + spot.name + when;
   $('#v-reason').textContent = v.reason;
 }
 
@@ -960,9 +1150,10 @@ function cellSet(sel, value, unit, tone) {
 function renderConditions() {
   const id = bannerTargetId(); if (!id) return;
   const a = state.assessments[id];
-  const wx = a && a.wx, rv = a && a.river;
+  const wx = wxForActive(a), rv = a && a.river;
+  const future = state.selectedTime != null && activeTime() > floorHour(Date.now()) + 3600 * 1000;
 
-  if (wx) {
+  if (wx && wx.windMph != null) {
     const dir = wx.windDirDeg != null ? wx.windDirDeg : 0;
     const arrow = '<span class="wind-arrow" style="transform:rotate(' + ((dir + 180) % 360) + 'deg)">↑</span>';
     cellSet('#c-wind',
@@ -986,13 +1177,17 @@ function renderConditions() {
       else if (rv.typicalLow != null && rv.valueM < rv.typicalLow) { label = t('riverLow'); }
       else label = t('riverNormal');
     }
-    cellSet('#c-river', round1(rv.valueM) + '<span style="font-size:.7em"> m</span>', label, tone);
+    /* No river forecast exists — say so when the timeline is in the future
+       rather than implying this level is predicted. */
+    if (future) label = t('riverLiveOnly');
+    cellSet('#c-river', round1(rv.valueM) + '<span style="font-size:.7em"> m</span>', label, future ? null : tone);
   } else {
     cellSet('#c-river', '—', rv && rv.unavailable ? t('riverUnavailable') : '', null);
   }
 
-  /* footer: freshness + gauge name */
+  /* footer: freshness + gauge name + timeline note */
   const bits = [];
+  if (future) bits.push(t('forecastNote'));
   if (a && a.at) bits.push(a.stale ? t('staleNote', { t: fmtTime(a.at) }) : t('updated', { t: fmtTime(a.at) }));
   if (rv && rv.stationLabel) bits.push((rv.auto ? t('gaugeAuto') : t('gauge')) + ': ' + rv.stationLabel);
   if (!navigator.onLine) bits.push(t('offline'));
@@ -1009,28 +1204,32 @@ function selectSpot(id, openSheet) {
 }
 
 function renderSheet(id) {
-  const spot = LAUNCH_POINTS.find((s) => s.id === id); if (!spot) return;
+  const spot = spotById(id); if (!spot) return;
   const a = state.assessments[id];
+  const isAdhoc = !!state.adhoc[id];
 
   $('#d-name').textContent = spot.name;
-  const subBits = [spot.waterway];
+  const subBits = [spot.waterway || (isAdhoc ? t('adhocWaterway') : '')].filter(Boolean);
   if (state.userPos) subBits.push(t('distanceAway', { v: round1(haversineKm(state.userPos.lat, state.userPos.lng, spot.lat, spot.lng)) }));
   $('#d-sub').textContent = subBits.join(' · ');
 
-  const badges = [t('launchType.' + spot.launchType) || spot.launchType,
-                  t('difficulty.' + spot.difficulty) || spot.difficulty];
+  const badges = [];
+  if (spot.launchType) badges.push(t('launchType.' + spot.launchType) || spot.launchType);
+  if (spot.difficulty) badges.push(t('difficulty.' + spot.difficulty) || spot.difficulty);
   $('#d-badges').innerHTML = badges.map((b) => '<span class="badge">' + esc(b) + '</span>').join('') +
+    (isAdhoc ? '<span class="badge" style="border-color:#9DC0C4;background:#E8F1F1">' + esc(t('adhocNote')) + '</span>' : '') +
     (spot.placeholder ? '<span class="badge" style="border-color:#E7C979;background:#FBF3DC">' + esc(t('placeholderNote')) + '</span>' : '');
 
-  /* Verdict + contributing factors, always with plain-English reasons */
-  const v = a && a.verdict;
+  /* Verdict + contributing factors for the active hour */
+  const v = a ? verdictForActive(a) : null;
   if (v) {
+    const when = state.selectedTime != null ? ' <span class="muted" style="font-weight:400">(' + esc(timeLabel(activeTime())) + ')</span>' : '';
     const rows = v.factors.length
       ? v.factors.map((f) => '<div class="factor"><span class="dot" style="background:' + VERDICT_COLOR[f.level] + '"></span><span>' + esc(f.msg) + '</span></div>').join('')
       : '<div class="factor"><span class="dot" style="background:' + VERDICT_COLOR.go + '"></span><span>' + esc(t('reasons.allClear')) + '</span></div>';
     $('#d-verdict').innerHTML =
       '<div class="kv"><b style="color:' + VERDICT_COLOR[v.level] + ';font-family:var(--display);font-size:1.05rem">' +
-      t('verdictEmoji.' + v.level) + ' ' + t('verdict.' + v.level) + '</b> — ' + esc(t('whyVerdict')) + ':</div>' + rows;
+      t('verdictEmoji.' + v.level) + ' ' + t('verdict.' + v.level) + '</b>' + when + ' — ' + esc(t('whyVerdict')) + ':</div>' + rows;
   } else {
     $('#d-verdict').innerHTML = '<div class="kv muted">' + esc(t('loading')) + '</div>';
   }
@@ -1044,11 +1243,11 @@ function renderSheet(id) {
         : ' — ' + esc(t('riverNoRange')))
     : '<span class="muted">' + esc(t('riverUnavailable')) + '</span>';
 
-  /* Static info from the curated data */
+  /* Static info from the curated data (ad-hoc points have none) */
   const p = spot.parking || {};
-  $('#d-parkinfo').innerHTML = '<b>' + esc(t('parkingHeading')) + ':</b> ' +
-    esc([p.name, p.postcode].filter(Boolean).join(', ') || '—') +
-    (p.type ? ' · ' + esc(t(p.type)) : '');
+  $('#d-parkinfo').innerHTML = (p.name || p.postcode)
+    ? '<b>' + esc(t('parkingHeading')) + ':</b> ' + esc([p.name, p.postcode].filter(Boolean).join(', ')) + (p.type ? ' · ' + esc(t(p.type)) : '')
+    : '';
   $('#d-route').innerHTML = spot.route ? '<b>' + esc(t('route')) + ':</b> ' + esc(spot.route) : '';
   $('#d-hazards').innerHTML = spot.hazards ? '<div class="hazard">⚠️ <b>' + esc(t('hazards')) + ':</b> ' + esc(spot.hazards) + '</div>' : '';
   $('#d-notes').textContent = spot.notes || '';
@@ -1060,7 +1259,7 @@ function renderSheet(id) {
   }
   acts.push('<a class="act primary" target="_blank" rel="noopener" href="https://maps.google.com/?q=' + spot.lat + ',' + spot.lng + '">🧭 ' + esc(t('actions.directions')) + '</a>');
   acts.push('<button class="act" id="act-carparks">🅿️ ' + esc(t('actions.carparks')) + '</button>');
-  acts.push('<a class="act" target="_blank" rel="noopener" href="' + CONFIG.PARK4NIGHT_URL + '">🌙 ' + esc(t('actions.overnight')) + '</a>');
+  acts.push('<a class="act" target="_blank" rel="noopener" href="' + CONFIG.PARK4NIGHT_URL(spot.lat, spot.lng) + '">🌙 ' + esc(t('actions.overnight')) + '</a>');
   acts.push('<button class="act" id="act-share">↗️ ' + esc(t('actions.share')) + '</button>');
   $('#d-actions').innerHTML = acts.join('');
 
@@ -1146,6 +1345,61 @@ function onToggleParking() {
   if (on) parkingLayer.addTo(map); else map.removeLayer(parkingLayer);
 }
 
+/* ---- Timeline: quick chips + hour slider ---- */
+/* Quick-jump targets, each a function returning an hour offset from now.
+   next(h) = the next occurrence of hour h today or tomorrow. */
+function nextHourOffset(targetHour) {
+  const now = new Date();
+  const cand = new Date(now); cand.setHours(targetHour, 0, 0, 0);
+  if (cand.getTime() <= floorHour(now.getTime())) cand.setDate(cand.getDate() + 1);
+  return Math.round((cand.getTime() - floorHour(now.getTime())) / (3600 * 1000));
+}
+const QUICK_CHIPS = () => ([
+  { key: 'now',    off: 0 },
+  { key: 'tonight',off: nextHourOffset(19) },
+  { key: 'tomAm',  off: nextHourOffset(9) },
+  { key: 'tomPm',  off: nextHourOffset(14) }
+]);
+
+function renderQuickChips() {
+  const box = $('#tl-quick');
+  box.innerHTML = QUICK_CHIPS().map((c) =>
+    '<button class="tl-chip" data-off="' + c.off + '">' + esc(t('quick.' + c.key)) + '</button>').join('');
+  box.querySelectorAll('.tl-chip').forEach((btn) =>
+    btn.addEventListener('click', () => setTimeOffset(parseInt(btn.dataset.off, 10))));
+}
+
+/* Set the active hour by offset-from-now and refresh everything on screen. */
+function setTimeOffset(off) {
+  off = Math.max(0, Math.min(TIME_SPAN_HOURS, off));
+  state.selectedTime = off === 0 ? null : hourOffsetToMs(off);
+  const range = $('#tl-range');
+  range.value = String(off);
+  range.style.setProperty('--fill', (off / TIME_SPAN_HOURS * 100) + '%');
+  $('#tl-readout').textContent = timeLabel(activeTime());
+  /* Mark the matching quick chip (if any) active. */
+  $('#tl-quick').querySelectorAll('.tl-chip').forEach((b) =>
+    b.setAttribute('aria-pressed', String(parseInt(b.dataset.off, 10) === off)));
+  refreshForTime();
+}
+
+/* Repaint verdict-dependent UI without refetching (weather is already in
+   memory as a series; river/sewage are reused). */
+function refreshForTime() {
+  for (const id in state.assessments) paintPin(id);
+  renderBanner();
+  renderConditions();
+  if (document.body.classList.contains('sheet-open') && state.selectedId) renderSheet(state.selectedId);
+}
+
+function setupTimeline() {
+  renderQuickChips();
+  const range = $('#tl-range');
+  range.max = String(TIME_SPAN_HOURS);
+  range.addEventListener('input', () => setTimeOffset(parseInt(range.value, 10)));
+  setTimeOffset(0);
+}
+
 /* ---- Geolocation (foreground only, on demand) ---- */
 function locateMe() {
   if (!('geolocation' in navigator)) { toast(t('locateDenied')); return; }
@@ -1171,29 +1425,31 @@ async function assessAll() {
     if (s.status === 'ok' && state.toggles.sewage) renderSewageLayer(s.fc);
   });
 
-  /* Per spot: weather + river in parallel; paint progressively. */
-  await Promise.allSettled(LAUNCH_POINTS.map(async (spot) => {
-    const [wxRes, rvRes] = await Promise.allSettled([getWeather(spot), getRiver(spot)]);
-    const wx = wxRes.status === 'fulfilled' && wxRes.value ? wxRes.value.value : null;
-    const rv = rvRes.status === 'fulfilled' && rvRes.value ? rvRes.value.value : null;
-    const at = Math.max(
-      wxRes.status === 'fulfilled' && wxRes.value ? wxRes.value.at : 0,
-      rvRes.status === 'fulfilled' && rvRes.value ? rvRes.value.at : 0) || null;
-    const stale = (wxRes.status === 'fulfilled' && wxRes.value && wxRes.value.stale) ||
-                  (rvRes.status === 'fulfilled' && rvRes.value && rvRes.value.stale) || false;
-
-    await sewagePromise;
-    const near = state.sewage.status === 'ok' ? sewageNearSpot(state.sewage.fc, spot) : null;
-
-    state.assessments[spot.id] = {
-      wx, river: rv, sewageNear: near, at, stale,
-      verdict: assessSpot(wx, rv, near)
-    };
-    paintPin(spot.id);
-    if (spot.id === bannerTargetId()) { renderBanner(); renderConditions(); }
-    if (document.body.classList.contains('sheet-open') && spot.id === state.selectedId) renderSheet(spot.id);
-  }));
+  /* Per spot: weather series + river in parallel; paint progressively. */
+  await Promise.allSettled(LAUNCH_POINTS.map((spot) => assessSpotData(spot, sewagePromise)));
   renderBanner(); renderConditions();
+}
+
+/* Fetch + store all data layers for one spot (curated or ad-hoc), then
+   repaint anything on screen that depends on it. Verdict is NOT stored —
+   it is derived per active time in verdictForActive(). */
+async function assessSpotData(spot, sewagePromise) {
+  const [wxRes, rvRes] = await Promise.allSettled([getWeather(spot), getRiver(spot)]);
+  const wxSeries = wxRes.status === 'fulfilled' && wxRes.value ? wxRes.value.value : null;
+  const rv = rvRes.status === 'fulfilled' && rvRes.value ? rvRes.value.value : null;
+  const at = Math.max(
+    wxRes.status === 'fulfilled' && wxRes.value ? wxRes.value.at : 0,
+    rvRes.status === 'fulfilled' && rvRes.value ? rvRes.value.at : 0) || null;
+  const stale = (wxRes.status === 'fulfilled' && wxRes.value && wxRes.value.stale) ||
+                (rvRes.status === 'fulfilled' && rvRes.value && rvRes.value.stale) || false;
+
+  if (sewagePromise) await sewagePromise;
+  const near = state.sewage.status === 'ok' ? sewageNearSpot(state.sewage.fc, spot) : null;
+
+  state.assessments[spot.id] = { wxSeries, river: rv, sewageNear: near, at, stale };
+  paintPin(spot.id);
+  if (spot.id === bannerTargetId()) { renderBanner(); renderConditions(); }
+  if (document.body.classList.contains('sheet-open') && spot.id === state.selectedId) renderSheet(spot.id);
 }
 
 function applyStaticStrings() {
@@ -1201,6 +1457,7 @@ function applyStaticStrings() {
   $('#s-advisory').textContent = t('advisory');
   $('#s-tg-sewage').textContent = t('toggles.sewage');
   $('#s-tg-parking').textContent = t('toggles.parking');
+  $('#s-check-here').textContent = t('checkHere');
   $('#s-wind').textContent = t('cells.wind');
   $('#s-gust').textContent = t('cells.gust');
   $('#s-rain').textContent = t('cells.rain');
@@ -1212,6 +1469,7 @@ function boot() {
   applyStaticStrings();
   renderInfoModal();
   initMap();
+  setupTimeline();
   setupPWA();
 
   $('#btn-info').addEventListener('click', () => $('#modal').classList.add('open'));
@@ -1222,6 +1480,7 @@ function boot() {
   $('#tg-sewage').addEventListener('click', onToggleSewage);
   $('#tg-parking').addEventListener('click', onToggleParking);
   $('#btn-locate').addEventListener('click', locateMe);
+  $('#check-here').addEventListener('click', checkCentre);
   window.addEventListener('online', renderConditions);
   window.addEventListener('offline', renderConditions);
 
